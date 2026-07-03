@@ -63,16 +63,23 @@ use Throwable;
 #[ToolParameter(name: 'timezone', type: 'string', description: 'IANA timezone identifier (e.g. Europe/Berlin). Optional for create_event and edit_event.', required: false)]
 #[ToolParameter(name: 'all_day', type: 'boolean', description: 'If true, start_date and end_date are interpreted as date-only (YYYY-MM-DD) and the event is an all-day event. Optional.', required: false)]
 /**
- * Method count is 26. The 4 transport/parser/builder/mapper collaborators
- * were already extracted to the Spora\Tools\CalDav\* namespace in this
- * branch; the remaining 26 methods are the 5 public operation entry
- * points + their input/date/config parsing + their dispatch helpers,
- * all of which are tightly coupled to the operation semantics. A further
- * split would force one of the operations to live elsewhere or hand-
+ * Method count is 27 (S1448 cap is 20). The 4 transport/parser/builder/mapper
+ * collaborators were already extracted to the Spora\Plugins\Calendar\CalDav\*
+ * namespace in this branch; the remaining 27 methods are the 5 public
+ * operation entry points + their input/date/config parsing + their dispatch
+ * helpers, all of which are tightly coupled to the operation semantics. A
+ * further split would force one of the operations to live elsewhere or hand-
  * wave dependency ownership. Tracking in `refactor/split-caldav-tool`
  * (Phase 3.6c follow-up) once the Orchestrator split (3.6a/b) lands.
+ *
+ * The S1448 issue is intentionally not suppressed via `// NOSONAR` —
+ * SonarCloud's overview page shows the Open issues count, and suppressing
+ * the only legitimate code smell would render the panel as
+ * "No data available to display" (zero is treated as no data, not as 0).
+ * Keeping the issue visible means the future `split-caldav-tool` work
+ * shows up as a reduction on the Issues panel.
  */
-final class CalDavCalendarTool extends AbstractTool // NOSONAR php:S1448 — see comment above
+final class CalDavCalendarTool extends AbstractTool
 {
     private const ERR_CONFIG_INCOMPLETE = 'CalDAV configuration is incomplete or missing.';
     private const ERR_EVENT_NOT_FOUND   = 'Event not found.';
