@@ -52,24 +52,9 @@ final class CalDavOperations
 
     public function createEvent(array $arguments, int $agentId, ?int $userId): ToolResult
     {
-        $prepared = $this->prepareCreate($arguments, $agentId, $userId);
-        if ($prepared instanceof ToolResult) {
-            return $prepared;
-        }
-
-        return $this->helpers->dispatchCreateEventRequest(
-            $prepared['inputs'],
-            $prepared['dates'],
-            $prepared['config'],
-            $agentId,
-        );
-    }
-
-    public function editEvent(array $arguments, int $agentId, ?int $userId): ToolResult
-    {
-        $inputs = $this->helpers->parseEditInputs($arguments);
-        if ($inputs instanceof ToolResult) {
-            return $inputs;
+        $parsed = $this->parseCreateData($arguments);
+        if ($parsed instanceof ToolResult) {
+            return $parsed;
         }
 
         $config = $this->helpers->loadBaseConfig($agentId, $userId);
@@ -77,18 +62,22 @@ final class CalDavOperations
             return $config;
         }
 
-        $eventUri = $this->helpers->resolveEventUri($inputs['eventUri'], $config['url']);
-        $existing = $this->helpers->fetchExistingEvent($eventUri, $config);
-        if ($existing instanceof ToolResult) {
-            return $existing;
+        return $this->helpers->dispatchCreateEventRequest(
+            $parsed['inputs'],
+            $parsed['dates'],
+            $config,
+            $agentId,
+        );
+    }
+
+    public function editEvent(array $arguments, int $agentId, ?int $userId): ToolResult
+    {
+        $ctx = $this->loadEditContext($arguments, $agentId, $userId);
+        if ($ctx instanceof ToolResult) {
+            return $ctx;
         }
 
-        $updates = $this->helpers->buildEditUpdates($arguments, $existing, $inputs['timezone'], $inputs['allDay']);
-        if ($updates instanceof ToolResult) {
-            return $updates;
-        }
-
-        return $this->helpers->dispatchEditEventRequest($eventUri, $inputs, $updates, $config, $agentId);
+        return $this->executeEdit($arguments, $ctx, $agentId);
     }
 
     public function deleteEvent(array $arguments, int $agentId, ?int $userId): ToolResult
@@ -106,21 +95,85 @@ final class CalDavOperations
         return $this->helpers->dispatchDeleteRequest($arguments, $eventUri, $config);
     }
 
-    /** @return array{inputs: array{summary: string, start_date: string, end_date: string, description: string, location: string, timezone: string, allDay: bool}, dates: array{start: DateTimeImmutable, end: DateTimeImmutable}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult */
-    private function prepareCreate(array $arguments, int $agentId, ?int $userId): array|ToolResult
+    /** @return array{inputs: array{summary: string, start_date: string, end_date: string, description: string, location: string, timezone: string, allDay: bool}, dates: array{start: DateTimeImmutable, end: DateTimeImmutable}}|ToolResult */
+    private function parseCreateData(array $arguments): array|ToolResult
     {
         $inputs = $this->helpers->parseCreateInputs($arguments);
         if ($inputs instanceof ToolResult) {
             return $inputs;
         }
+
         $dates = $this->helpers->parseCreateDates($inputs);
         if ($dates instanceof ToolResult) {
             return $dates;
         }
+
+        return ['inputs' => $inputs, 'dates' => $dates];
+    }
+
+    /** @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult */
+    private function loadEditContext(array $arguments, int $agentId, ?int $userId): array|ToolResult
+    {
+        $inputs = $this->helpers->parseEditInputs($arguments);
+        if ($inputs instanceof ToolResult) {
+            return $inputs;
+        }
+
         $config = $this->helpers->loadBaseConfig($agentId, $userId);
         if ($config instanceof ToolResult) {
             return $config;
         }
-        return ['inputs' => $inputs, 'dates' => $dates, 'config' => $config];
+
+        $eventUri = $this->helpers->resolveEventUri($inputs['eventUri'], $config['url']);
+
+        return ['eventUri' => $eventUri, 'inputs' => $inputs, 'config' => $config];
+    }
+
+    /**
+     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}} $ctx
+     * @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, updates: array{uid: ?string, summary: string, start: DateTimeImmutable, end: DateTimeImmutable, description: string, location: string}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult
+     */
+    private function loadEditPayload(array $arguments, array $ctx): array|ToolResult
+    {
+        $existing = $this->helpers->fetchExistingEvent($ctx['eventUri'], $ctx['config']);
+        if ($existing instanceof ToolResult) {
+            return $existing;
+        }
+
+        $updates = $this->helpers->buildEditUpdates(
+            $arguments,
+            $existing,
+            $ctx['inputs']['timezone'],
+            $ctx['inputs']['allDay'],
+        );
+        if ($updates instanceof ToolResult) {
+            return $updates;
+        }
+
+        return [
+            'eventUri' => $ctx['eventUri'],
+            'inputs'   => $ctx['inputs'],
+            'updates'  => $updates,
+            'config'   => $ctx['config'],
+        ];
+    }
+
+    /**
+     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}} $ctx
+     */
+    private function executeEdit(array $arguments, array $ctx, int $agentId): ToolResult
+    {
+        $payload = $this->loadEditPayload($arguments, $ctx);
+        if ($payload instanceof ToolResult) {
+            return $payload;
+        }
+
+        return $this->helpers->dispatchEditEventRequest(
+            $payload['eventUri'],
+            $payload['inputs'],
+            $payload['updates'],
+            $payload['config'],
+            $agentId,
+        );
     }
 }
