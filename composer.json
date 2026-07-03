@@ -5,6 +5,7 @@
   "license": "MIT",
   "require": {
     "php": "^8.4.1",
+    "craigk5n/php-icalendar-core": "^1.0",
     "spora-ai/spora-core": ">=0.3.0 <1.0.0"
   },
   "require-dev": {
@@ -16,12 +17,12 @@
   },
   "autoload": {
     "psr-4": {
-      "Spora\\\\Plugins\\\\Calendar\\\\": "src/"
+      "Spora\\Plugins\\Calendar\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "Spora\\\\Plugins\\\\Calendar\\\\Tests\\\\": "tests/"
+      "Spora\\Plugins\\Calendar\\Tests\\": "tests/"
     }
   },
   "scripts": {
