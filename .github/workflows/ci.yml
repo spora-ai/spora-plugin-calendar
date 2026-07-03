@@ -120,7 +120,14 @@ jobs:
     # `always()` so the scanner still runs on tag pushes of unbuildable
     # commits (e.g. the v0.1.0 placeholder), giving SonarCloud a
     # "previous version" baseline for the next push to main.
-    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
+    # Skip fork PRs — secrets aren't available there and the job would
+    # fail noisily.
+    if: |
+      always() && (
+        github.event_name == 'push' ||
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name == github.repository)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
