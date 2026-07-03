@@ -117,7 +117,14 @@ jobs:
   sonar:
     name: SonarCloud scan
     needs: coverage
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    # `always()` so the scanner still runs when earlier jobs fail — e.g. the
+    # v0.1.0 placeholder (no real tool, no tests pass) needs an analysis
+    # landed in SonarCloud so the next push to main has a "previous version"
+    # baseline and the quality gate computes. Without this, the placeholder
+    # tag push (e.g. the initial v0.1.0) leaves the project with no analysis
+    # history, the leak period stays undefined, and `new_*` metrics remain
+    # empty on main → "Not Computed" on the overview.
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -129,6 +136,11 @@ jobs:
           fetch-depth: 0
 
       - name: Download coverage.xml
+        # continue-on-error: the coverage job may have failed (e.g. on the
+        # v0.1.0 placeholder where the test/coverage jobs can't run). When
+        # the artifact is missing, the scanner still runs but without
+        # coverage data — that's fine for seeding the analysis history.
+        continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: coverage-report
