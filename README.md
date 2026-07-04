@@ -13,26 +13,12 @@ CalDAV is a protocol, not a SaaS — any server speaking
 ## Installation
 
 ```bash
-# Recommended — install via the Spora CLI
 php bin/spora plugin:install spora-ai/spora-plugin-calendar
-php bin/spora spora:install
-
-# For development against a sibling git clone, pass --path:
-php bin/spora plugin:install spora-ai/spora-plugin-calendar --path=/abs/path/to/checkout
-
-# Alternative — drop a clone into the Spora repo
-git clone https://github.com/spora-ai/spora-plugin-calendar.git plugins/calendar
-php bin/spora spora:install
-
-# Alternative — external path (no Spora checkout changes)
-git clone https://github.com/spora-ai/spora-plugin-calendar.git /opt/spora-plugins/calendar
-echo 'SPORA_PLUGINS_PATHS=/opt/spora-plugins/calendar' >> .env
-php bin/spora spora:install
 ```
 
-After install, the `calendar` tool is exposed. Operations are dispatched via
-the `action` parameter: `list_events`, `get_event`, `create_event`,
-`edit_event`, `delete_event`.
+For local development against a sibling checkout, pass `--path=/abs/path/to/checkout`.
+
+After install, the `calendar` tool is exposed. Operations are dispatched via the `action` parameter (see [Per-tool parameters](#per-tool-parameters)).
 
 ## Configuration
 
