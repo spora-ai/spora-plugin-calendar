@@ -54,9 +54,11 @@ or `YYYY-MM-DD` for all-day events). Returns `ToolResult::ok` on success or
 | `edit_event` | Edit an existing event. Requires approval. | `event_uri` (string, required), `etag` (string, required), `summary` (string, optional — falls back to existing), `start_date` (string, optional), `end_date` (string, optional), `description` (string, optional), `location` (string, optional), `timezone` (string, optional), `all_day` (bool, optional) |
 | `delete_event` | Delete an event. Requires approval. | `event_uri` (string, required), `etag` (string, optional — adds `If-Match` for safer deletion) |
 
-`create_event` and `edit_event` write iCalendar `VTIMEZONE`-aware payloads:
-when `timezone` is set, `DTSTART`/`DTEND` carry the `TZID` parameter; when
-`all_day` is `true`, dates are interpreted as date-only (`YYYY-MM-DD`).
+`create_event` and `edit_event` write iCalendar payloads: when `timezone` is
+set, `DTSTART`/`DTEND` carry a `TZID` parameter; when `all_day` is `true`,
+dates are interpreted as date-only (`YYYY-MM-DD`). The plugin does not emit
+a `VTIMEZONE` component — most servers use their own timezone database to
+resolve unknown TZIDs.
 
 For safe edits, fetch the event with `get_event` first to obtain its current
 `etag` — the server returns `412 Precondition Failed` (mapped to a friendly
