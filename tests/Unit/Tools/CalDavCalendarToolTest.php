@@ -60,9 +60,9 @@ it('returns error if caldav is not configured', function () {
 it('correctly unfolds RFC 5545 long lines before parsing', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url'      => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url'      => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -100,9 +100,9 @@ it('correctly unfolds RFC 5545 long lines before parsing', function () {
 it('makes correct http REPORT request and parses ics events', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -177,9 +177,9 @@ it('get_event returns error if caldav is not configured', function () {
 it('get_event returns error on 404', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -199,9 +199,9 @@ it('get_event returns error on 404', function () {
 it('delete_event resolves relative event_uri against base URL', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_CALDAV_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_CALDAV_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -224,9 +224,9 @@ it('delete_event resolves relative event_uri against base URL', function () {
 it('delete_event handles event_uri without leading slash', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_CALDAV_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_CALDAV_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -251,9 +251,9 @@ it('delete_event handles event_uri without leading slash', function () {
 it('get_event resolves relative event_uri against base URL', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_CALDAV_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_CALDAV_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -277,9 +277,9 @@ it('get_event resolves relative event_uri against base URL', function () {
 it('get_event parses ics content correctly', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -347,9 +347,9 @@ it('create_event returns error if caldav is not configured', function () {
 it('create_event makes correct HTTP PUT request and returns success', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -381,9 +381,9 @@ it('create_event makes correct HTTP PUT request and returns success', function (
 it('create_event supports all_day with date-only format', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -430,9 +430,9 @@ it('create_event rejects invalid date format for all_day events', function () {
 it('create_event supports timezone parameter', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -478,9 +478,9 @@ it('create_event rejects invalid timezone', function () {
 it('create_event handles 415 unsupported media type', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -527,9 +527,9 @@ it('edit_event returns error if etag is missing', function () {
 it('edit_event fetches existing, updates and puts back', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -566,9 +566,9 @@ it('edit_event fetches existing, updates and puts back', function () {
 it('edit_event handles 412 Precondition Failed', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -600,9 +600,9 @@ it('edit_event handles 412 Precondition Failed', function () {
 it('edit_event returns failure when existing event dates cannot be parsed', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -652,9 +652,9 @@ it('delete_event returns error if caldav is not configured', function () {
 it('delete_event makes correct HTTP DELETE request', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -681,9 +681,9 @@ it('delete_event makes correct HTTP DELETE request', function () {
 it('delete_event handles 404 Not Found', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -766,9 +766,9 @@ it('describeAction returns correct description for unknown operation', function 
 it('listEvents returns error on HTTP 500', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -793,9 +793,9 @@ it('listEvents returns error on HTTP 500', function () {
 it('getEvent returns error on HTTP 500', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -819,9 +819,9 @@ it('getEvent returns error on HTTP 500', function () {
 it('createEvent returns error on HTTP 500', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -847,9 +847,9 @@ it('createEvent returns error on HTTP 500', function () {
 it('editEvent returns error on HTTP 500 during fetch', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -875,9 +875,9 @@ it('editEvent returns error on HTTP 500 during fetch', function () {
 it('deleteEvent returns error on HTTP 500', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -903,9 +903,9 @@ it("get_event handles VTIMEZONE before VEVENT in components array", function () 
     // VTIMEZONE came first. Use array_values() to reindex.
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows("getEffectiveSettings")->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        "core.caldav.url" => "https://cal.example.com/",
-        "core.caldav.username" => "test_user",
-        "core.caldav.password" => "secret123",
+        "url" => "https://cal.example.com/",
+        "username" => "test_user",
+        "password" => "secret123",
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -937,9 +937,9 @@ END:VCALENDAR");
 it('edit_event normalizes unquoted etag from user', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'test_user',
-        'core.caldav.password' => 'secret123',
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -973,9 +973,9 @@ it('edit_event normalizes unquoted etag from user', function () {
 it('edit_event returns Precondition Failed when server returns HTTP 412', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -1011,9 +1011,9 @@ it('edit_event returns Precondition Failed when server returns HTTP 412', functi
 it('edit_event returns Event not found when server returns HTTP 404 on PUT', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -1047,9 +1047,9 @@ it('edit_event returns Event not found when server returns HTTP 404 on PUT', fun
 it('edit_event catches Throwable during PUT and returns error', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -1081,9 +1081,9 @@ it('edit_event catches Throwable during PUT and returns error', function () {
 it('edit_event returns missing etag when no etag is supplied', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
     $client = Mockery::mock(HttpClientInterface::class);
 
@@ -1101,9 +1101,9 @@ it('edit_event returns missing etag when no etag is supplied', function () {
 it('delete_event returns Precondition Failed when server returns HTTP 412', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -1127,9 +1127,9 @@ it('delete_event returns Precondition Failed when server returns HTTP 412', func
 it('delete_event catches Throwable and returns error', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);
@@ -1149,9 +1149,9 @@ it('delete_event catches Throwable and returns error', function () {
 it('create_event rejects an end_date before start_date', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
     $client = Mockery::mock(HttpClientInterface::class);
 
@@ -1170,9 +1170,9 @@ it('create_event rejects an end_date before start_date', function () {
 it('create_event returns 415 when server rejects media type', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
-        'core.caldav.url' => CAL_BASE_URL,
-        'core.caldav.username' => 'u',
-        'core.caldav.password' => 'p',
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
     ]);
 
     $client = Mockery::mock(HttpClientInterface::class);

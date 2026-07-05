@@ -252,9 +252,9 @@ final class CalDavOperationHelpers
     public function loadBaseConfig(int $agentId, ?int $userId): array|ToolResult
     {
         $settings = $this->configService->getEffectiveSettings(CalDavCalendarTool::class, $agentId, $userId);
-        $url      = rtrim((string) ($settings['core.caldav.url']      ?? ''), '/');
-        $username = (string) ($settings['core.caldav.username'] ?? '');
-        $password = (string) ($settings['core.caldav.password'] ?? '');
+        $url      = rtrim((string) ($settings['url']      ?? ''), '/');
+        $username = (string) ($settings['username'] ?? '');
+        $password = (string) ($settings['password'] ?? '');
         if ($url === '' || $username === '' || $password === '') {
             return new ToolResult(false, self::ERR_CONFIG_INCOMPLETE);
         }

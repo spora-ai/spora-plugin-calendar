@@ -49,7 +49,7 @@ final class CalDavClient
      */
     public function effectiveTimeout(array $settings): int
     {
-        $setting = (int) ($settings['core.caldav.http_timeout'] ?? 0);
+        $setting = (int) ($settings['http_timeout'] ?? 0);
         if ($setting > 0) {
             return $setting;
         }
