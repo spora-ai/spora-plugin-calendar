@@ -29,10 +29,10 @@ below).
 
 | Setting | Required | Default | Notes |
 |---|---|---|---|
-| `core.caldav.url` | yes | — | Full URL to a specific CalDAV calendar collection, e.g. `https://caldav.icloud.com/...` |
-| `core.caldav.username` | yes | — | CalDAV account username (often the account email) |
-| `core.caldav.password` | yes | — | CalDAV password or app-specific token |
-| `core.caldav.http_timeout` | no | `30` | Seconds before an HTTP request fails. Overrides `SPORA_TOOL_HTTP_TIMEOUT` |
+| `url` | yes | — | Full URL to a specific CalDAV calendar collection, e.g. `https://caldav.icloud.com/...` |
+| `username` | yes | — | CalDAV account username (often the account email) |
+| `password` | yes | — | CalDAV password or app-specific token |
+| `http_timeout` | no | `30` | Seconds before an HTTP request fails. Overrides `SPORA_TOOL_HTTP_TIMEOUT` |
 
 The `password` field is encrypted at rest by Spora's `ToolConfigService`,
 masked in the UI, and never logged. The CalDAV client uses HTTP Basic auth

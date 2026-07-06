@@ -36,11 +36,11 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 #[ToolOperation(name: 'create_event', description: 'Create a new event on the CalDAV calendar', enabledByDefault: true, requiresApprovalByDefault: true)]
 #[ToolOperation(name: 'edit_event', description: 'Edit an existing event on the CalDAV calendar', enabledByDefault: true, requiresApprovalByDefault: true)]
 #[ToolOperation(name: 'delete_event', description: 'Delete an event from the CalDAV calendar', enabledByDefault: true, requiresApprovalByDefault: true)]
-#[ToolSetting(key: 'core.caldav.url', label: 'CalDAV URL', type: 'text', description: 'URL to the Calendar server (e.g. Nextcloud, Baikal)', )]
-#[ToolSetting(key: 'core.caldav.username', label: 'Username', type: 'text', description: 'CalDAV username', )]
-#[ToolSetting(key: 'core.caldav.password', label: 'Password', type: 'password', description: 'CalDAV password or app token', required: true)]
+#[ToolSetting(key: 'url', label: 'CalDAV URL', type: 'text', description: 'URL to the Calendar server (e.g. Nextcloud, Baikal)', )]
+#[ToolSetting(key: 'username', label: 'Username', type: 'text', description: 'CalDAV username', )]
+#[ToolSetting(key: 'password', label: 'Password', type: 'password', description: 'CalDAV password or app token', required: true)]
 #[ToolSetting(
-    key: 'core.caldav.http_timeout',
+    key: 'http_timeout',
     label: 'HTTP Timeout',
     type: 'text',
     description: 'Seconds before an HTTP request fails (default: 30)',
