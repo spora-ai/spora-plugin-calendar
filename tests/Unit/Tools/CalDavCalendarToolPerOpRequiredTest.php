@@ -30,12 +30,12 @@ function calendarToolParameterArgs(string $name): array
     throw new RuntimeException("ToolParameter '{$name}' not declared on " . CalDavCalendarTool::class);
 }
 
-it('binds start_date to list_events only', function () {
-    expect(calendarToolParameterArgs('start_date')['required'])->toBe(['list_events']);
+it('binds start_date to list_events and create_event', function () {
+    expect(calendarToolParameterArgs('start_date')['required'])->toBe(['list_events', 'create_event']);
 });
 
-it('binds end_date to list_events only', function () {
-    expect(calendarToolParameterArgs('end_date')['required'])->toBe(['list_events']);
+it('binds end_date to list_events and create_event', function () {
+    expect(calendarToolParameterArgs('end_date')['required'])->toBe(['list_events', 'create_event']);
 });
 
 it('binds event_uri to get_event, edit_event, delete_event', function () {

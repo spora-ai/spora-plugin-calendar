@@ -48,8 +48,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 )]
 // Parameter declaration order matches the hand-rolled schema so the approval UI
 // renders fields in the same sequence. `action` is auto-synthesized.
-#[ToolParameter(name: 'start_date', type: 'string', description: 'Start date in ISO-8601 format (or YYYY-MM-DD for all_day events)', required: ['list_events'])]
-#[ToolParameter(name: 'end_date', type: 'string', description: 'End date in ISO-8601 format (or YYYY-MM-DD for all_day events)', required: ['list_events'])]
+#[ToolParameter(name: 'start_date', type: 'string', description: 'Start date in ISO-8601 format (or YYYY-MM-DD for all_day events)', required: ['list_events', 'create_event'])]
+#[ToolParameter(name: 'end_date', type: 'string', description: 'End date in ISO-8601 format (or YYYY-MM-DD for all_day events)', required: ['list_events', 'create_event'])]
 #[ToolParameter(name: 'event_uri', type: 'string', description: 'The CalDAV URI of the event (required for get_event, edit_event, delete_event)', required: ['get_event', 'edit_event', 'delete_event'])]
 #[ToolParameter(name: 'etag', type: 'string', description: 'The ETag of the event (required for edit_event, optional for delete_event)', required: ['edit_event'])]
 #[ToolParameter(name: 'summary', type: 'string', description: 'Event title/summary (required for create_event)', required: ['create_event'])]
