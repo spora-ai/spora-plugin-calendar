@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/spora-ai/spora-core/v0.3.0/plugin.schema.json",
+  "$schema": "https://docs.spora-ai.com/schemas/plugin.schema.json",
   "slug": "calendar",
   "description": "CalDAV calendar read/write for Spora agents.",
   "class": "Spora\\Plugins\\Calendar\\CalendarPlugin",
