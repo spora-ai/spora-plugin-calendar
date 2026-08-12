@@ -4,3 +4,5 @@
 /.php-cs-fixer.cache
 /coverage.xml
 /.worktrees/
+
+/tmp/
