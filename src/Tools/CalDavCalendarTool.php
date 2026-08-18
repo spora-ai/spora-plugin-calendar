@@ -11,6 +11,7 @@ use Spora\Plugins\Calendar\CalDav\CalDavOperations;
 use Spora\Plugins\Calendar\CalDav\CalDavResponseMapper;
 use Spora\Plugins\Calendar\CalDav\IcsBuilder;
 use Spora\Plugins\Calendar\CalDav\IcsParser;
+use Spora\Services\PrincipalContext;
 use Spora\Services\ToolConfigService;
 use Spora\Tools\AbstractTool;
 use Spora\Tools\Attributes\Tool;
@@ -76,8 +77,13 @@ final class CalDavCalendarTool extends AbstractTool
         );
     }
 
-    public function execute(array $arguments, int $agentId, ?int $userId = null, ?int $taskId = null): ToolResult
-    {
+    public function execute(
+        array $arguments,
+        int $agentId,
+        ?int $userId = null,
+        ?int $taskId = null,
+        ?PrincipalContext $context = null,
+    ): ToolResult {
         $operation = $this->getOperationName($arguments);
 
         return match ($operation) {
