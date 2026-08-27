@@ -11,6 +11,7 @@ use Spora\Plugins\Calendar\CalDav\CalDavOperations;
 use Spora\Plugins\Calendar\CalDav\CalDavResponseMapper;
 use Spora\Plugins\Calendar\CalDav\IcsBuilder;
 use Spora\Plugins\Calendar\CalDav\IcsParser;
+use Spora\Services\PrincipalContext;
 use Spora\Services\ToolConfigService;
 use Spora\Tools\AbstractTool;
 use Spora\Tools\Attributes\Tool;
@@ -76,16 +77,22 @@ final class CalDavCalendarTool extends AbstractTool
         );
     }
 
-    public function execute(array $arguments, int $agentId, ?int $userId = null, ?int $taskId = null): ToolResult
-    {
+    public function execute(
+        array $arguments,
+        int $agentId,
+        ?int $userId = null,
+        ?int $taskId = null,
+        ?PrincipalContext $context = null,
+    ): ToolResult {
+        $ownerId   = $context->ownerUserId ?? $userId;
         $operation = $this->getOperationName($arguments);
 
         return match ($operation) {
-            'list_events'  => $this->operations->listEvents($arguments, $agentId, $userId),
-            'get_event'    => $this->operations->getEvent($arguments, $agentId, $userId),
-            'create_event' => $this->operations->createEvent($arguments, $agentId, $userId),
-            'edit_event'   => $this->operations->editEvent($arguments, $agentId, $userId),
-            'delete_event' => $this->operations->deleteEvent($arguments, $agentId, $userId),
+            'list_events'  => $this->operations->listEvents($arguments, $agentId, $ownerId),
+            'get_event'    => $this->operations->getEvent($arguments, $agentId, $ownerId),
+            'create_event' => $this->operations->createEvent($arguments, $agentId, $ownerId),
+            'edit_event'   => $this->operations->editEvent($arguments, $agentId, $ownerId),
+            'delete_event' => $this->operations->deleteEvent($arguments, $agentId, $ownerId),
             default        => new ToolResult(false, "Unknown operation: {$operation}"),
         };
     }
