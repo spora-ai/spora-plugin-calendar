@@ -35,6 +35,16 @@ final class CalDavOperations
         return $this->helpers->dispatchListEventsRequest($dates, $config);
     }
 
+    public function listCalendars(array $arguments, int $agentId, ?int $userId): ToolResult
+    {
+        $config = $this->helpers->loadBaseConfig($agentId, $userId);
+        if ($config instanceof ToolResult) {
+            return $config;
+        }
+
+        return $this->helpers->dispatchListCalendarsRequest($config);
+    }
+
     public function getEvent(array $arguments, int $agentId, ?int $userId): ToolResult
     {
         $eventUri = trim((string) ($arguments['event_uri'] ?? ''));
@@ -139,10 +149,15 @@ final class CalDavOperations
         if ($existing instanceof ToolResult) {
             return $existing;
         }
+        // O3: when the caller didn't pass an ETag, fall back to the one
+        // we just fetched so we can still send a conditional PUT.
+        if ($ctx['inputs']['etag'] === '') {
+            $ctx['inputs']['etag'] = $existing['etag'];
+        }
 
         $updates = $this->helpers->buildEditUpdates(
             $arguments,
-            $existing,
+            $existing['event'],
             $ctx['inputs']['timezone'],
             $ctx['inputs']['allDay'],
         );

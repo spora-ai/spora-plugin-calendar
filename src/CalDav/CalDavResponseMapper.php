@@ -43,7 +43,11 @@ final class CalDavResponseMapper
             $response = $this->client->request($method, $url, $requestOptions);
         } catch (Throwable $e) {
             $this->logger?->error(self::LOG_CALDAV_EXCEPTION, ['exception' => $e, 'method' => $method, 'url' => $url]);
-            return new ToolResult(false, "{$errorPrefix}: {$e->getMessage()}");
+            return new ToolResult(false, "{$errorPrefix}: {$e->getMessage()}", [
+                'status' => 'error',
+                'reason' => 'exception',
+                'message' => $e->getMessage(),
+            ]);
         }
         return $this->handleResponse($response, $method, $url, $onSuccess, $onHttpError);
     }
@@ -66,7 +70,10 @@ final class CalDavResponseMapper
             if ($onHttpError !== null) {
                 return $onHttpError($response, $statusCode);
             }
-            return new ToolResult(false, "CalDAV server returned HTTP {$statusCode}");
+            return new ToolResult(false, "CalDAV server returned HTTP {$statusCode}", [
+                'status'      => 'error',
+                'http_status' => $statusCode,
+            ]);
         }
         return $onSuccess($response);
     }
@@ -80,55 +87,91 @@ final class CalDavResponseMapper
     public function handleGetError(int $statusCode): ToolResult
     {
         if ($statusCode === 404) {
-            return new ToolResult(false, self::ERR_EVENT_NOT_FOUND);
+            return $this->errorResult('get_event', $statusCode, self::ERR_EVENT_NOT_FOUND, 'Verify the event_uri; the event may have been deleted on the server.');
         }
-        return new ToolResult(false, "CalDAV server returned HTTP {$statusCode}");
+        return $this->errorResult('get_event', $statusCode, "CalDAV server returned HTTP {$statusCode}");
     }
 
-    public function handleCreateResponse(ResponseInterface $response, string $eventUri, string $summary): ToolResult
+    public function handleCreateResponse(ResponseInterface $response, string $eventUri, string $summary, string $uid): ToolResult
     {
         $statusCode = $response->getStatusCode();
         if ($statusCode === 201) {
             $etag = $response->getHeaders(false)['etag'][0] ?? null;
             return new ToolResult(true, "Event '{$summary}' created successfully.", [
-                'event_uri' => $eventUri,
-                'etag' => $etag,
+                'status'     => 'ok',
+                'action'     => 'create_event',
+                'event_uri'  => $eventUri,
+                'uid'        => $uid,
+                'etag'       => $etag,
             ]);
         }
-        return new ToolResult(true, "Event '{$summary}' created successfully.");
+        return new ToolResult(true, "Event '{$summary}' created successfully.", [
+            'status' => 'ok',
+            'action' => 'create_event',
+        ]);
     }
 
     public function handleCreateError(int $statusCode): ToolResult
     {
         if ($statusCode === 415) {
-            return new ToolResult(false, 'Calendar server does not support event creation (unsupported media type).');
+            return $this->errorResult('create_event', $statusCode, 'Calendar server does not support event creation (unsupported media type).', 'Verify the calendar URL points at a real calendar collection, not the calendar-home.');
         }
-        return new ToolResult(false, "CalDAV server returned HTTP {$statusCode}");
+        return $this->errorResult('create_event', $statusCode, "CalDAV server returned HTTP {$statusCode}");
     }
 
     public function handlePutResponse(ResponseInterface $response, string $eventUri, string $summary): ToolResult
     {
         $newEtag = $response->getHeaders(false)['etag'][0] ?? null;
         return new ToolResult(true, "Event '{$summary}' updated successfully.", [
+            'status'    => 'ok',
+            'action'    => 'edit_event',
             'event_uri' => $eventUri,
-            'etag' => $newEtag,
+            'etag'      => $newEtag,
         ]);
     }
 
     public function handlePutError(int $statusCode): ToolResult
     {
         if ($statusCode === 412) {
-            return new ToolResult(false, 'Precondition Failed: The event has been modified since you fetched it. Please fetch the latest version and try again.');
+            return $this->errorResult(
+                'edit_event',
+                $statusCode,
+                'Precondition Failed: The event has been modified since you fetched it. Please fetch the latest version and try again.',
+                'Re-issue get_event to obtain the current ETag and retry.',
+            );
         }
         if ($statusCode === 404) {
-            return new ToolResult(false, self::ERR_EVENT_NOT_FOUND);
+            return $this->errorResult('edit_event', $statusCode, self::ERR_EVENT_NOT_FOUND, 'Verify the event_uri; the event may have been deleted on the server.');
         }
-        return new ToolResult(false, "CalDAV server returned HTTP {$statusCode}");
+        return $this->errorResult('edit_event', $statusCode, "CalDAV server returned HTTP {$statusCode}");
     }
 
-    public function handleDeleteResponse(): ToolResult
+    public function handleDeleteResponse(string $eventUri): ToolResult
     {
-        return new ToolResult(true, 'Event deleted successfully.');
+        return new ToolResult(true, 'Event deleted successfully.', [
+            'status'    => 'ok',
+            'action'    => 'delete_event',
+            'event_uri' => $eventUri,
+        ]);
+    }
+
+    /**
+     * Build a uniform error envelope: `{status: 'error', action, http_status, hint?}`.
+     * `data` is additive — existing tools that parse the text content still work.
+     *
+     * @return ToolResult
+     */
+    private function errorResult(string $action, int $httpStatus, string $message, ?string $hint = null): ToolResult
+    {
+        $data = [
+            'status'      => 'error',
+            'action'      => $action,
+            'http_status' => $httpStatus,
+        ];
+        if ($hint !== null) {
+            $data['hint'] = $hint;
+        }
+        return new ToolResult(false, $message, $data);
     }
 
     /**

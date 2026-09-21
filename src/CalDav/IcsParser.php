@@ -48,13 +48,98 @@ final class IcsParser
 
         $eventData = $this->collectEventsFromMultistatus($parser);
         if ($eventData === []) {
-            return new ToolResult(true, 'No events found in the specified time range.');
+            return new ToolResult(true, 'No events found in the specified time range.', [
+                'status'  => 'ok',
+                'action'  => 'list_events',
+                'events'  => [],
+                'count'   => 0,
+            ]);
         }
 
         return new ToolResult(
             true,
             "Found " . count($eventData) . " events:\n\n" . $this->formatEventRows($eventData),
-            ['events' => $eventData],
+            [
+                'status' => 'ok',
+                'action' => 'list_events',
+                'events' => $eventData,
+                'count'  => count($eventData),
+            ],
+        );
+    }
+
+    /**
+     * Parse a PROPFIND multistatus response into a list of available
+     * calendars. Filters to entries whose resourcetype contains
+     * <c:calendar/> so non-calendar collections (address books, etc.)
+     * don't pollute the result.
+     *
+     * @return ToolResult with `data.calendars[]` = list of {href, name}
+     */
+    public function parseCalendarListResponse(string $xmlBody): ToolResult
+    {
+        $parser = new DOMDocument();
+        $previousUseErrors = libxml_use_internal_errors(true);
+        try {
+            $loaded = $parser->loadXML($xmlBody);
+            $loadErrors = libxml_get_errors();
+            libxml_clear_errors();
+        } finally {
+            libxml_use_internal_errors($previousUseErrors);
+        }
+
+        if ($loaded === false) {
+            return $this->malformedXmlResult($loadErrors);
+        }
+
+        $xpath = new DOMXPath($parser);
+        $xpath->registerNamespace('d', 'DAV:');
+        $xpath->registerNamespace('c', 'urn:ietf:params:xml:ns:caldav');
+
+        $calendars = [];
+        $responses = $xpath->query('//d:response');
+        if ($responses === false) {
+            $responses = new DOMNodeList();
+        }
+        foreach ($responses as $response) {
+            $href = $xpath->query('d:href', $response)->item(0)?->textContent;
+            if ($href === null || $href === '') {
+                continue;
+            }
+            $isCalendar = $xpath->query('.//c:calendar', $response)->length > 0;
+            if (!$isCalendar) {
+                continue;
+            }
+            $nameNode = $xpath->query('d:propstat/d:prop/d:displayname', $response)->item(0);
+            $name = $nameNode !== null ? trim($nameNode->textContent) : '';
+            $calendars[] = [
+                'href' => trim($href),
+                'name' => trim($name),
+            ];
+        }
+
+        if ($calendars === []) {
+            return new ToolResult(true, 'No calendars found at the configured URL.', [
+                'status'    => 'ok',
+                'action'    => 'list_calendars',
+                'calendars' => [],
+                'count'     => 0,
+            ]);
+        }
+
+        $rows = [];
+        foreach ($calendars as $cal) {
+            $rows[] = "- {$cal['name']} ({$cal['href']})";
+        }
+        return new ToolResult(
+            true,
+            "Found " . count($calendars) . " calendars:\n\n" . implode("\n", $rows),
+            [
+                'status'    => 'ok',
+                'action'    => 'list_calendars',
+                'calendars' => $calendars,
+                'count'     => count($calendars),
+            ],
         );
     }
 
@@ -65,7 +150,11 @@ final class IcsParser
     {
         $event = $this->firstVEvent($icsContent);
         if ($event === null) {
-            return new ToolResult(false, 'No VEVENT found in the calendar data.');
+            return new ToolResult(false, 'No VEVENT found in the calendar data.', [
+                'status' => 'error',
+                'action' => 'get_event',
+                'reason' => 'no_vevent',
+            ]);
         }
 
         $details = new EventDetails(
@@ -78,6 +167,8 @@ final class IcsParser
         );
 
         return new ToolResult(true, $this->formatGetEventOutput($eventUri, $etag, $details), [
+            'status'      => 'ok',
+            'action'      => 'get_event',
             'event_uri'   => $eventUri,
             'uid'         => $details->uid,
             'summary'     => $details->summary,
@@ -301,7 +392,11 @@ final class IcsParser
     {
         $firstError = $loadErrors[0] ?? null;
         $detail = $firstError instanceof LibXMLError ? trim($firstError->message) : 'malformed XML';
-        return new ToolResult(false, "CalDAV response could not be parsed: {$detail}");
+        return new ToolResult(false, "CalDAV response could not be parsed: {$detail}", [
+            'status'  => 'error',
+            'reason'  => 'malformed_xml',
+            'message' => $detail,
+        ]);
     }
 
     /**

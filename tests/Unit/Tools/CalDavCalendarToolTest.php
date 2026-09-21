@@ -513,17 +513,6 @@ it('edit_event returns error if event_uri is missing', function () {
         ->and($result->content)->toContain('event_uri');
 });
 
-it('edit_event returns error if etag is missing', function () {
-    $config = Mockery::mock(ToolConfigService::class);
-    $client = Mockery::mock(HttpClientInterface::class);
-    $tool = new CalDavCalendarTool($config, $client);
-
-    $result = $tool->execute(['action' => 'edit_event', 'event_uri' => CAL_EVENT_URI], 1);
-
-    expect($result->success)->toBeFalse()
-        ->and($result->content)->toContain('etag');
-});
-
 it('edit_event fetches existing, updates and puts back', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, null)->andReturn([
@@ -1078,24 +1067,44 @@ it('edit_event catches Throwable during PUT and returns error', function () {
         ->and($result->content)->toContain('connection reset');
 });
 
-it('edit_event returns missing etag when no etag is supplied', function () {
+it('edit_event auto-fetches the ETag when none is supplied (O3)', function () {
+    // O3: when the caller doesn't supply an ETag, the edit flow fetches
+    // the existing event (which it does anyway for field merging) and
+    // uses that ETag for the conditional PUT.
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->andReturn([
         'url' => CAL_BASE_URL,
         'username' => 'u',
         'password' => 'p',
     ]);
+
     $client = Mockery::mock(HttpClientInterface::class);
+
+    $getResponse = Mockery::mock(ResponseInterface::class);
+    $getResponse->allows('getStatusCode')->andReturn(200);
+    $getResponse->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_ETAG_VALUE]]);
+    $getResponse->allows('getContent')->andReturn("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:o3-fetch\r\nSUMMARY:Original\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR");
+
+    $putResponse = Mockery::mock(ResponseInterface::class);
+    $putResponse->allows('getStatusCode')->andReturn(200);
+    $putResponse->allows('getHeaders')->with(false)->andReturn(['etag' => ['"new"']]);
+
+    $client->expects('request')->with('GET', CAL_EVENT_URI, Mockery::any())->andReturn($getResponse);
+    // PUT must carry the fetched ETag, not the literal caller input.
+    $client->expects('request')->with('PUT', CAL_EVENT_URI, Mockery::on(function ($options) {
+        return $options['headers']['If-Match'] === CAL_ETAG_VALUE;
+    }))->andReturn($putResponse);
 
     $tool = new CalDavCalendarTool($config, $client);
     $result = $tool->execute([
         'action' => 'edit_event',
         'event_uri' => CAL_EVENT_URI,
-        'summary' => 'no etag',
+        // no etag — flow must auto-fetch
+        'summary'  => 'Updated title',
     ], 1);
 
-    expect($result->success)->toBeFalse()
-        ->and($result->content)->toContain('Missing required parameter: etag');
+    expect($result->success)->toBeTrue()
+        ->and($result->content)->toContain('updated successfully');
 });
 
 it('delete_event returns Precondition Failed when server returns HTTP 412', function () {
@@ -1191,4 +1200,223 @@ it('create_event returns 415 when server rejects media type', function () {
 
     expect($result->success)->toBeFalse()
         ->and($result->content)->toContain('unsupported media type');
+});
+
+it('create_event sends If-None-Match: * for idempotency (B1)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(201);
+    $response->allows('getHeaders')->with(false)->andReturn(['etag' => ['"e1"']]);
+
+    $client->expects('request')->with('PUT', Mockery::any(), Mockery::on(function ($options) {
+        return ($options['headers']['If-None-Match'] ?? null) === '*';
+    }))->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => 'Idempotent',
+        'start_date' => CAL_START_DATE_JUN,
+        'end_date'   => CAL_END_DATE_JUN,
+    ], 1);
+
+    expect($result->success)->toBeTrue();
+});
+
+it('create_event returns assigned URI, UID, and ETag in data (E1)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(201);
+    $response->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_NEW_ETAG]]);
+
+    $client->expects('request')->with('PUT', Mockery::any(), Mockery::any())->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => CAL_SUMMARY_TEST,
+        'start_date' => CAL_START_DATE_JUN,
+        'end_date'   => CAL_END_DATE_JUN,
+    ], 1);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['status'])->toBe('ok')
+        ->and($result->data['action'])->toBe('create_event')
+        ->and($result->data['event_uri'])->toBeString()
+        ->and($result->data['uid'])->toBeString()
+        ->and($result->data['etag'])->toBe(CAL_NEW_ETAG);
+});
+
+it('list_events auto-expands YYYY-MM-DD to T00:00:00 / T23:59:59 (B2)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(207);
+    $response->allows('getHeaders')->andReturn([]);
+    $response->allows('getContent')->andReturn(
+        '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:"></d:multistatus>',
+    );
+
+    $client->expects('request')->with('REPORT', Mockery::any(), Mockery::on(function ($options) {
+        // The wire payload must include the expanded RFC 5545 timestamps,
+        // not the raw YYYY-MM-DD strings.
+        return str_contains($options['body'], 'time-range start="20260922T000000Z"')
+            && str_contains($options['body'], 'end="20260922T235959Z"');
+    }))->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action' => 'list_events',
+        'start_date' => '2026-09-22',
+        'end_date'   => '2026-09-22',
+    ], 1);
+
+    expect($result->success)->toBeTrue();
+});
+
+it('create_event rejects summary longer than 255 characters (O2)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $client = Mockery::mock(HttpClientInterface::class);
+    $tool = new CalDavCalendarTool($config, $client);
+
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => str_repeat('a', 256),
+        'start_date' => CAL_START_DATE_JUN,
+        'end_date'   => CAL_END_DATE_JUN,
+    ], 1);
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('255 characters')
+        ->and($result->data['reason'])->toBe('summary_too_long');
+});
+
+it('list_calendars issues PROPFIND and returns calendars array (E2)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(207);
+    $response->allows('getHeaders')->andReturn([]);
+
+    $xmlBody = <<<XML
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/calendars/u/personal/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
+        <d:displayname>Personal</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/calendars/u/work/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
+        <d:displayname>Work</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <!-- non-calendar collection, must be filtered out -->
+  <d:response>
+    <d:href>/addressbooks/u/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/></d:resourcetype>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>
+XML;
+
+    $response->allows('getContent')->andReturn($xmlBody);
+
+    $client->expects('request')->with('PROPFIND', 'https://cal.example.com', Mockery::on(function ($options) {
+        return ($options['headers']['Depth'] ?? null) === '1'
+            && str_contains($options['body'], 'propfind');
+    }))->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute(['action' => 'list_calendars'], 1);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['status'])->toBe('ok')
+        ->and($result->data['action'])->toBe('list_calendars')
+        ->and($result->data['calendars'])->toHaveCount(2)
+        ->and($result->data['calendars'][0]['href'])->toBe('/calendars/u/personal/')
+        ->and($result->data['calendars'][0]['name'])->toBe('Personal');
+});
+
+it('list_calendars returns empty array when server advertises no calendars (E2)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'u',
+        'password' => 'p',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(207);
+    $response->allows('getHeaders')->andReturn([]);
+    $response->allows('getContent')->andReturn(
+        '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:"></d:multistatus>',
+    );
+    $client->expects('request')->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute(['action' => 'list_calendars'], 1);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['calendars'])->toBe([])
+        ->and($result->data['count'])->toBe(0);
+});
+
+it('validation errors carry structured data (E3/O1)', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $client = Mockery::mock(HttpClientInterface::class);
+    $tool = new CalDavCalendarTool($config, $client);
+
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => 'Backwards',
+        'start_date' => '2026-06-15T10:00:00Z',
+        'end_date'   => '2026-06-15T09:00:00Z',
+    ], 1);
+
+    expect($result->success)->toBeFalse()
+        ->and($result->data['status'])->toBe('error')
+        ->and($result->data['action'])->toBe('create_event')
+        ->and($result->data['reason'])->toBe('end_before_start');
 });
