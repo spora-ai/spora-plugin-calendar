@@ -45,7 +45,7 @@ final class CalDavOperationHelpers
         return $this->client->resolveEventUri($eventUri, $baseUrl);
     }
 
-    /** @param array{url: string, username: string, password: string, settings: array<string, mixed>} $config */
+    /** @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchDeleteRequest(array $arguments, string $eventUri, array $config): ToolResult
     {
         $eventUri = $this->client->resolveEventUri($eventUri, $config['url']);
@@ -55,11 +55,7 @@ final class CalDavOperationHelpers
         if ($etag !== '') {
             $headers['If-Match'] = $etag;
         }
-        $requestOptions = [
-            'headers'    => $headers,
-            'auth_basic' => [$config['username'], $config['password']],
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-        ];
+        $requestOptions = $this->buildRequestOptions($config, $headers);
 
         return $this->mapper->runHttp(
             'DELETE',
@@ -81,15 +77,14 @@ final class CalDavOperationHelpers
     }
 
     /** @param array{0: string, 1: string} $dates
-     *  @param array{url: string, username: string, password: string, settings: array<string, mixed>} $config */
+     *  @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchListEventsRequest(array $dates, array $config): ToolResult
     {
-        $requestOptions = [
-            'headers'    => ['Depth' => '1', 'Content-Type' => 'application/xml; charset=utf-8'],
-            'auth_basic' => [$config['username'], $config['password']],
-            'body'       => $this->buildReportXml($dates[0], $dates[1]),
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-        ];
+        $requestOptions = $this->buildRequestOptions(
+            $config,
+            ['Depth' => '1', 'Content-Type' => 'application/xml; charset=utf-8'],
+            $this->buildReportXml($dates[0], $dates[1]),
+        );
 
         return $this->mapper->runHttp(
             'REPORT',
@@ -100,15 +95,11 @@ final class CalDavOperationHelpers
         );
     }
 
-    /** @param array{url: string, username: string, password: string, settings: array<string, mixed>} $config */
+    /** @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchGetEventRequest(string $eventUri, array $config): ToolResult
     {
         $resolvedUri = $this->client->resolveEventUri($eventUri, $config['url']);
-        $requestOptions = [
-            'headers'    => ['Accept' => 'text/calendar'],
-            'auth_basic' => [$config['username'], $config['password']],
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-        ];
+        $requestOptions = $this->buildRequestOptions($config, ['Accept' => 'text/calendar']);
 
         return $this->mapper->runHttp(
             'GET',
@@ -124,7 +115,7 @@ final class CalDavOperationHelpers
 
     /** @param array{summary: string, start_date: string, end_date: string, description: string, location: string, timezone: string, allDay: bool} $inputs
      *  @param array{start: DateTimeImmutable, end: DateTimeImmutable} $dates
-     *  @param array{url: string, username: string, password: string, settings: array<string, mixed>} $config */
+     *  @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchCreateEventRequest(array $inputs, array $dates, array $config, int $agentId): ToolResult
     {
         $eventUri  = rtrim($config['url'], '/') . '/' . ltrim($this->builder->generateEventFilename($inputs['summary'], $dates['start']), '/');
@@ -141,12 +132,11 @@ final class CalDavOperationHelpers
             ),
         );
 
-        $requestOptions = [
-            'headers'    => ['Content-Type' => 'text/calendar; charset=utf-8'],
-            'auth_basic' => [$config['username'], $config['password']],
-            'body'       => $icsContent,
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-        ];
+        $requestOptions = $this->buildRequestOptions(
+            $config,
+            ['Content-Type' => 'text/calendar; charset=utf-8'],
+            $icsContent,
+        );
 
         return $this->mapper->runHttp(
             'PUT',
@@ -160,7 +150,7 @@ final class CalDavOperationHelpers
 
     /** @param array{eventUri: string, etag: string, timezone: string, allDay: bool} $inputs
      *  @param array{uid: ?string, summary: string, start: DateTimeImmutable, end: DateTimeImmutable, description: string, location: string} $updates
-     *  @param array{url: string, username: string, password: string, settings: array<string, mixed>} $config */
+     *  @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchEditEventRequest(string $eventUri, array $inputs, array $updates, array $config, int $agentId): ToolResult
     {
         $icsContent = $this->builder->buildIcs(
@@ -176,12 +166,11 @@ final class CalDavOperationHelpers
             ),
         );
 
-        $requestOptions = [
-            'headers'    => ['Content-Type' => 'text/calendar; charset=utf-8', 'If-Match' => $inputs['etag']],
-            'auth_basic' => [$config['username'], $config['password']],
-            'body'       => $icsContent,
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-        ];
+        $requestOptions = $this->buildRequestOptions(
+            $config,
+            ['Content-Type' => 'text/calendar; charset=utf-8', 'If-Match' => $inputs['etag']],
+            $icsContent,
+        );
 
         return $this->mapper->runHttp(
             'PUT',
@@ -248,7 +237,7 @@ final class CalDavOperationHelpers
         return ['start' => $start, 'end' => $end];
     }
 
-    /** @return array{url: string, username: string, password: string, settings: array<string, mixed>}|ToolResult */
+    /** @return array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}|ToolResult */
     public function loadBaseConfig(int $agentId, ?int $userId): array|ToolResult
     {
         $settings = $this->configService->getEffectiveSettings(CalDavCalendarTool::class, $agentId, $userId);
@@ -258,7 +247,39 @@ final class CalDavOperationHelpers
         if ($url === '' || $username === '' || $password === '') {
             return new ToolResult(false, self::ERR_CONFIG_INCOMPLETE);
         }
-        return ['url' => $url, 'username' => $username, 'password' => $password, 'settings' => $settings];
+        $authMethod = (string) ($settings['auth_method'] ?? CalDavClient::AUTH_AUTO);
+        return [
+            'url'        => $url,
+            'username'   => $username,
+            'password'   => $password,
+            'authMethod' => $authMethod,
+            'settings'   => $settings,
+        ];
+    }
+
+    /**
+     * Build the Symfony HttpClient options array shared by every
+     * dispatch method. Centralising it keeps `auth_method`,
+     * `auth_basic`, and the timeout in lockstep — the digest-retry
+     * path in {@see CalDavClient} reads `auth_method` to decide
+     * whether to send Basic preemptively or wait for a 401 challenge.
+     *
+     * @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config
+     * @param array<string, string> $headers
+     * @return array<string, mixed>
+     */
+    private function buildRequestOptions(array $config, array $headers, ?string $body = null): array
+    {
+        $options = [
+            'headers'    => $headers,
+            'auth_basic' => [$config['username'], $config['password']],
+            'timeout'    => $this->client->effectiveTimeout($config['settings']),
+            'auth_method' => $config['authMethod'],
+        ];
+        if ($body !== null) {
+            $options['body'] = $body;
+        }
+        return $options;
     }
 
     /** @return array{0: string, 1: string}|ToolResult */
@@ -295,15 +316,11 @@ final class CalDavOperationHelpers
 XML;
     }
 
-    /** @param array{url: string, username: string, password: string, settings: array<string, mixed>} $config
+    /** @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config
      *  @return array<string, mixed>|ToolResult */
     public function fetchExistingEvent(string $eventUri, array $config): array|ToolResult
     {
-        $requestOptions = [
-            'headers'    => ['Accept' => 'text/calendar'],
-            'auth_basic' => [$config['username'], $config['password']],
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-        ];
+        $requestOptions = $this->buildRequestOptions($config, ['Accept' => 'text/calendar']);
 
         $response = $this->client->request('GET', $eventUri, $requestOptions);
         $statusCode = $response->getStatusCode();

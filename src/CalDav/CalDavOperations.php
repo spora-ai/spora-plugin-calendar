@@ -111,7 +111,7 @@ final class CalDavOperations
         return ['inputs' => $inputs, 'dates' => $dates];
     }
 
-    /** @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult */
+    /** @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}}|ToolResult */
     private function loadEditContext(array $arguments, int $agentId, ?int $userId): array|ToolResult
     {
         $inputs = $this->helpers->parseEditInputs($arguments);
@@ -130,8 +130,8 @@ final class CalDavOperations
     }
 
     /**
-     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}} $ctx
-     * @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, updates: array{uid: ?string, summary: string, start: DateTimeImmutable, end: DateTimeImmutable, description: string, location: string}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult
+     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}} $ctx
+     * @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, updates: array{uid: ?string, summary: string, start: DateTimeImmutable, end: DateTimeImmutable, description: string, location: string}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}}|ToolResult
      */
     private function loadEditPayload(array $arguments, array $ctx): array|ToolResult
     {
@@ -159,7 +159,7 @@ final class CalDavOperations
     }
 
     /**
-     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}} $ctx
+     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}} $ctx
      */
     private function executeEdit(array $arguments, array $ctx, int $agentId): ToolResult
     {

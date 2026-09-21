@@ -41,6 +41,18 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 #[ToolSetting(key: 'username', label: 'Username', type: 'text', description: 'CalDAV username', )]
 #[ToolSetting(key: 'password', label: 'Password', type: 'password', description: 'CalDAV password or app token', required: true)]
 #[ToolSetting(
+    key: 'auth_method',
+    label: 'Auth Method',
+    type: 'select',
+    description: 'HTTP authentication scheme. Auto sends Basic first and falls back to Digest on a 401 challenge (covers Nextcloud, Baikal, all-inkl, Cyrus).',
+    options: [
+        'auto'   => 'Auto (Basic then Digest)',
+        'basic'  => 'Basic only',
+        'digest' => 'Digest only',
+    ],
+    default: 'auto',
+)]
+#[ToolSetting(
     key: 'http_timeout',
     label: 'HTTP Timeout',
     type: 'text',
