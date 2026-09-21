@@ -35,6 +35,7 @@ final class CalDavOperationHelpers
         private readonly IcsParser $parser,
         private readonly CalDavResponseMapper $mapper,
         private readonly CalDavXmlBuilder $xmlBuilder = new CalDavXmlBuilder(),
+        private readonly CalDavRequestOptionsBuilder $requestBuilder = new CalDavRequestOptionsBuilder(),
     ) {}
 
     public function getEventError(string $field): ToolResult
@@ -85,7 +86,7 @@ final class CalDavOperationHelpers
         if ($etag !== '') {
             $headers['If-Match'] = $etag;
         }
-        $requestOptions = $this->buildRequestOptions($config, $headers);
+        $requestOptions = $this->requestBuilder->buildRequestOptions($config, $headers, null, $this->client->effectiveTimeout($config["settings"]));
 
         return $this->mapper->runHttp(
             'DELETE',
@@ -110,10 +111,11 @@ final class CalDavOperationHelpers
      *  @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchListEventsRequest(array $dates, array $config): ToolResult
     {
-        $requestOptions = $this->buildRequestOptions(
+        $requestOptions = $this->requestBuilder->buildRequestOptions(
             $config,
             ['Depth' => '1', 'Content-Type' => 'application/xml; charset=utf-8'],
             $this->xmlBuilder->buildReportXml($dates[0], $dates[1]),
+            $this->client->effectiveTimeout($config['settings']),
         );
 
         return $this->mapper->runHttp(
@@ -130,10 +132,11 @@ final class CalDavOperationHelpers
      *  @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config */
     public function dispatchListCalendarsRequest(array $config): ToolResult
     {
-        $requestOptions = $this->buildRequestOptions(
+        $requestOptions = $this->requestBuilder->buildRequestOptions(
             $config,
             ['Depth' => '1', 'Content-Type' => 'application/xml; charset=utf-8'],
             $this->xmlBuilder->buildPropfindXml(),
+            $this->client->effectiveTimeout($config['settings']),
         );
 
         return $this->mapper->runHttp(
@@ -149,7 +152,7 @@ final class CalDavOperationHelpers
     public function dispatchGetEventRequest(string $eventUri, array $config): ToolResult
     {
         $resolvedUri = $this->client->resolveEventUri($eventUri, $config['url']);
-        $requestOptions = $this->buildRequestOptions($config, ['Accept' => 'text/calendar']);
+        $requestOptions = $this->requestBuilder->buildRequestOptions($config, ["Accept" => "text/calendar"], null, $this->client->effectiveTimeout($config["settings"]));
 
         return $this->mapper->runHttp(
             'GET',
@@ -183,7 +186,7 @@ final class CalDavOperationHelpers
             ),
         );
 
-        $requestOptions = $this->buildRequestOptions(
+        $requestOptions = $this->requestBuilder->buildRequestOptions(
             $config,
             // If-None-Match: * makes the create idempotent — a retry against
             // a server that already accepted the first PUT will not overwrite
@@ -193,6 +196,7 @@ final class CalDavOperationHelpers
                 'If-None-Match' => '*',
             ],
             $icsContent,
+            $this->client->effectiveTimeout($config['settings']),
         );
 
         return $this->mapper->runHttp(
@@ -223,10 +227,11 @@ final class CalDavOperationHelpers
             ),
         );
 
-        $requestOptions = $this->buildRequestOptions(
+        $requestOptions = $this->requestBuilder->buildRequestOptions(
             $config,
             ['Content-Type' => 'text/calendar; charset=utf-8', 'If-Match' => $inputs['etag']],
             $icsContent,
+            $this->client->effectiveTimeout($config['settings']),
         );
 
         return $this->mapper->runHttp(
@@ -299,10 +304,10 @@ final class CalDavOperationHelpers
         // covers the whole day. All-day requests leave the input alone.
         $startStr = $inputs['allDay']
             ? $inputs['start_date']
-            : $this->expandDateOnly($inputs['start_date'], false);
+            : $this->requestBuilder->expandDateOnly($inputs['start_date'], false);
         $endStr   = $inputs['allDay']
             ? $inputs['end_date']
-            : $this->expandDateOnly($inputs['end_date'], true);
+            : $this->requestBuilder->expandDateOnly($inputs['end_date'], true);
         try {
             $start = $this->builder->parseEventDate($startStr, $inputs['timezone'], $inputs['allDay']);
             $end   = $this->builder->parseEventDate($endStr, $inputs['timezone'], $inputs['allDay']);
@@ -350,26 +355,13 @@ final class CalDavOperationHelpers
      * @param array<string, string> $headers
      * @return array<string, mixed>
      */
-    private function buildRequestOptions(array $config, array $headers, ?string $body = null): array
-    {
-        $options = [
-            'headers'    => $headers,
-            'auth_basic' => [$config['username'], $config['password']],
-            'timeout'    => $this->client->effectiveTimeout($config['settings']),
-            'auth_method' => $config['authMethod'],
-        ];
-        if ($body !== null) {
-            $options['body'] = $body;
-        }
-        return $options;
-    }
 
     /** @return array{0: string, 1: string}|ToolResult */
     public function parseDateRange(string $startDateStr, string $endDateStr): array|ToolResult
     {
         try {
-            $start = new DateTimeImmutable($this->expandDateOnly($startDateStr, false));
-            $end   = new DateTimeImmutable($this->expandDateOnly($endDateStr, true));
+            $start = new DateTimeImmutable($this->requestBuilder->expandDateOnly($startDateStr, false));
+            $end   = new DateTimeImmutable($this->requestBuilder->expandDateOnly($endDateStr, true));
         } catch (Throwable) {
             return $this->errorResult('list_events', self::ERR_INVALID_DATE, 'invalid_date', 'Use ISO-8601 (e.g. "2026-09-22T09:00:00") or YYYY-MM-DD.');
         }
@@ -385,13 +377,6 @@ final class CalDavOperationHelpers
      * the whole day without the server rejecting it as "no time component".
      * Strings that already contain a time component pass through unchanged.
      */
-    private function expandDateOnly(string $dateStr, bool $isEnd): string
-    {
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateStr) === 1) {
-            return $dateStr . ($isEnd ? 'T23:59:59' : 'T00:00:00');
-        }
-        return $dateStr;
-    }
 
 
     /**
@@ -405,7 +390,7 @@ final class CalDavOperationHelpers
      */
     public function fetchExistingEvent(string $eventUri, array $config): array|ToolResult
     {
-        $requestOptions = $this->buildRequestOptions($config, ['Accept' => 'text/calendar']);
+        $requestOptions = $this->requestBuilder->buildRequestOptions($config, ["Accept" => "text/calendar"], null, $this->client->effectiveTimeout($config["settings"]));
 
         $response = $this->client->request('GET', $eventUri, $requestOptions);
         $statusCode = $response->getStatusCode();
