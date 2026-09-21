@@ -154,6 +154,12 @@ final class CalDavOperations
         if ($ctx['inputs']['etag'] === '') {
             $ctx['inputs']['etag'] = $existing['etag'];
         }
+        // P0: preserve the original timezone when caller didn't supply one.
+        // Without this, the re-write would emit floating local time and the
+        // wall-clock would silently drift on the next DST transition.
+        if ($ctx['inputs']['timezone'] === '') {
+            $ctx['inputs']['timezone'] = $existing['event']['timezone'] ?? '';
+        }
 
         $updates = $this->helpers->buildEditUpdates(
             $arguments,

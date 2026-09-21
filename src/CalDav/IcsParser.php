@@ -157,6 +157,14 @@ final class IcsParser
             ]);
         }
 
+        // P0: the library's $event->getDtStart() returns just the date value,
+        // losing the TZID parameter. Walk the raw properties so we can
+        // surface the original timezone context to the caller — without it,
+        // an agent that edits the event would re-write it as floating local
+        // time, silently shifting wall-clock across DST boundaries.
+        [$dtstartRaw, $dtstartTzid] = $this->extractDateProperty($event, 'DTSTART');
+        [$dtendRaw,   $dtendTzid]   = $this->extractDateProperty($event, 'DTEND');
+
         $details = new EventDetails(
             uid: $event->getUid(),
             summary: $event->getSummary(),
@@ -172,8 +180,10 @@ final class IcsParser
             'event_uri'   => $eventUri,
             'uid'         => $details->uid,
             'summary'     => $details->summary,
-            'dtstart'     => $details->dtstart,
-            'dtend'       => $details->dtend,
+            'dtstart'     => $dtstartRaw,
+            'dtend'       => $dtendRaw,
+            'dtstart_tzid' => $dtstartTzid,
+            'dtend_tzid'   => $dtendTzid,
             'description' => $details->description,
             'location'    => $details->location,
             'etag'        => $etag,
@@ -181,11 +191,43 @@ final class IcsParser
     }
 
     /**
+     * Walk the event's raw properties and extract the value + TZID for
+     * a given date-time property (DTSTART / DTEND).
+     *
+     * The craigk5n library exposes only the value via getDtStart()/getDtEnd();
+     * the TZID parameter is lost unless we iterate the property bag.
+     *
+     * @return array{0: ?string, 1: ?string} [value, tzid]
+     */
+    private function extractDateProperty(VEvent $event, string $propertyName): array
+    {
+        foreach ($event->getProperties() as $property) {
+            if (strcasecmp($property->getName(), $propertyName) !== 0) {
+                continue;
+            }
+            $value = $property->getValue()->getRawValue();
+            $tzid = null;
+            foreach ($property->getParameters() as $key => $paramValue) {
+                if (strcasecmp($key, 'TZID') === 0) {
+                    $tzid = (string) $paramValue;
+                    break;
+                }
+            }
+            return [$value, $tzid];
+        }
+        return [null, null];
+    }
+
+    /**
      * Parse a VCALENDAR body and return the first VEVENT as a flat array
      * suitable for `edit_event`'s merge step. Returns a stub if the body has
      * no VEVENT (caller treats that as an "incomplete" event).
      *
-     * @return array{uid: ?string, summary: string, dtstart: ?DateTimeImmutable, dtend: ?DateTimeImmutable, description: string, location: string}
+     * Includes the original TZID so the builder can re-emit the event with
+     * the same timezone context — without it, the wire payload drops to
+     * floating local time and the wall-clock drifts across DST boundaries.
+     *
+     * @return array{uid: ?string, summary: string, dtstart: ?DateTimeImmutable, dtend: ?DateTimeImmutable, description: string, location: string, timezone: ?string}
      */
     public function parseEventForEdit(string $icsContent): array
     {
@@ -199,16 +241,25 @@ final class IcsParser
                 'dtend'       => null,
                 'description' => '',
                 'location'    => '',
+                'timezone'    => null,
             ];
         }
+
+        // P0: pull the TZID from the raw DTSTART/DTEND properties and parse
+        // the datetimes with that timezone context — otherwise the DateTime
+        // ends up floating and a subsequent setTimezone() to the new
+        // target TZ would shift the wall-clock across DST boundaries.
+        [$startRaw, $startTzid] = $this->extractDateProperty($event, 'DTSTART');
+        [$endRaw,   $endTzid]   = $this->extractDateProperty($event, 'DTEND');
 
         return [
             'uid'         => $event->getUid() ?? '',
             'summary'     => $event->getSummary() ?? '',
-            'dtstart'     => $this->parseIcsDateString($event->getDtStart() ?? ''),
-            'dtend'       => $this->parseIcsDateString($event->getDtEnd() ?? ''),
+            'dtstart'     => $this->parseIcsDateString($startRaw, $startTzid),
+            'dtend'       => $this->parseIcsDateString($endRaw, $endTzid),
             'description' => $event->getDescription() ?? '',
             'location'    => $event->getLocation() ?? '',
+            'timezone'    => $startTzid,
         ];
     }
 
@@ -331,17 +382,6 @@ final class IcsParser
         return $eventUri;
     }
 
-    private function parseIcsDateString(?string $dateStr): ?DateTimeImmutable
-    {
-        if ($dateStr === null || $dateStr === '') {
-            return null;
-        }
-        if (strlen($dateStr) === 8 || str_ends_with($dateStr, 'Z')) {
-            return $this->parseIcsDateVariant($dateStr);
-        }
-        return $this->parseIcsDateWithTimezone($dateStr) ?? $this->parseIcsDateGeneric($dateStr);
-    }
-
     private function parseIcsDateVariant(string $dateStr): ?DateTimeImmutable
     {
         if (str_ends_with($dateStr, 'Z')) {
@@ -370,6 +410,29 @@ final class IcsParser
             return null;
         }
         return $parsed instanceof DateTimeImmutable ? $parsed->setTimezone($tz) : null;
+    }
+
+    private function parseIcsDateString(?string $dateStr, ?string $tzid = null): ?DateTimeImmutable
+    {
+        if ($dateStr === null || $dateStr === '') {
+            return null;
+        }
+        if ($tzid !== null && $tzid !== '' && !str_ends_with($dateStr, 'Z') && strlen($dateStr) !== 8) {
+            // P0 round-trip: when the source DTSTART carried a TZID
+            // parameter, parse the value as local time in that zone so a
+            // subsequent setTimezone() doesn't shift the wall-clock.
+            try {
+                $tz = new DateTimeZone($tzid);
+                $parsed = DateTimeImmutable::createFromFormat(self::ICS_DATETIME_LOCAL, $dateStr, $tz);
+                return $parsed instanceof DateTimeImmutable ? $parsed->setTimezone($tz) : null;
+            } catch (Throwable) {
+                // Invalid TZID — fall through to the generic path.
+            }
+        }
+        if (strlen($dateStr) === 8 || str_ends_with($dateStr, 'Z')) {
+            return $this->parseIcsDateVariant($dateStr);
+        }
+        return $this->parseIcsDateWithTimezone($dateStr) ?? $this->parseIcsDateGeneric($dateStr);
     }
 
     /**

@@ -303,6 +303,132 @@ it('get_event parses ics content correctly', function () {
         ->and($result->content)->toContain(CAL_ETAG_VALUE);
 });
 
+it('get_event surfaces the DTSTART TZID parameter (P0 timezone round-trip)', function () {
+    // P0: the craigk5n library's $event->getDtStart() returns just the
+    // date value, losing the TZID parameter. Walk the raw property bag so
+    // the agent can pass the original timezone back to edit_event without
+    // it silently drifting across DST.
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(200);
+    $response->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_ETAG_VALUE]]);
+    $response->allows('getContent')->andReturn(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n" .
+        "UID:tz-uid\r\nSUMMARY:NY Meeting\r\n" .
+        "DTSTART;TZID=America/New_York:20260601T100000\r\n" .
+        "DTEND;TZID=America/New_York:20260601T110000\r\n" .
+        "END:VEVENT\r\nEND:VCALENDAR",
+    );
+
+    $client->expects('request')->with('GET', CAL_EVENT_URI, Mockery::any())->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute(['action' => 'get_event', 'event_uri' => CAL_EVENT_URI], 1);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['dtstart'])->toBe('20260601T100000')
+        ->and($result->data['dtstart_tzid'])->toBe('America/New_York')
+        ->and($result->data['dtend'])->toBe('20260601T110000')
+        ->and($result->data['dtend_tzid'])->toBe('America/New_York');
+});
+
+it('edit_event preserves the original timezone when caller omits timezone (P0 round-trip)', function () {
+    // P0: a get → edit round-trip without an explicit timezone must NOT
+    // re-emit the event as floating local time. The existing event's
+    // TZID is the source of truth.
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+
+    $getResponse = Mockery::mock(ResponseInterface::class);
+    $getResponse->allows('getStatusCode')->andReturn(200);
+    $getResponse->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_ETAG_VALUE]]);
+    $getResponse->allows('getContent')->andReturn(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n" .
+        "UID:tz-edit-uid\r\nSUMMARY:Tokyo Meeting\r\nDTSTART;TZID=Asia/Tokyo:20260601T100000\r\nDTEND;TZID=Asia/Tokyo:20260601T110000\r\n" .
+        "END:VEVENT\r\nEND:VCALENDAR",
+    );
+
+    $putResponse = Mockery::mock(ResponseInterface::class);
+    $putResponse->allows('getStatusCode')->andReturn(200);
+    $putResponse->allows('getHeaders')->with(false)->andReturn(['etag' => ['"new-etag"']]);
+
+    $client->expects('request')->with('GET', CAL_EVENT_URI, Mockery::any())->andReturn($getResponse);
+    // PUT must carry the original Asia/Tokyo TZID, NOT floating local time.
+    $client->expects('request')->with('PUT', CAL_EVENT_URI, Mockery::on(function ($options) {
+        return str_contains($options['body'], 'DTSTART;TZID=Asia/Tokyo:20260601T100000')
+            && str_contains($options['body'], 'DTEND;TZID=Asia/Tokyo:20260601T110000');
+    }))->andReturn($putResponse);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action'     => 'edit_event',
+        'event_uri'  => CAL_EVENT_URI,
+        'etag'       => CAL_ETAG_VALUE,
+        'summary'    => 'Tokyo Meeting (Updated)',
+        // no timezone parameter — must inherit from the existing event
+    ], 1);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->content)->toContain('updated successfully');
+});
+
+it('edit_event lets the caller override the timezone explicitly (P0 round-trip)', function () {
+    // When the caller DOES supply a timezone, it wins over the existing
+    // one — that's the whole point of a time-zone-aware edit tool.
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+
+    $getResponse = Mockery::mock(ResponseInterface::class);
+    $getResponse->allows('getStatusCode')->andReturn(200);
+    $getResponse->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_ETAG_VALUE]]);
+    $getResponse->allows('getContent')->andReturn(
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n" .
+        "UID:tz-edit-override\r\nSUMMARY:NY Meeting\r\nDTSTART;TZID=America/New_York:20260601T100000\r\nDTEND;TZID=America/New_York:20260601T110000\r\n" .
+        "END:VEVENT\r\nEND:VCALENDAR",
+    );
+
+    $putResponse = Mockery::mock(ResponseInterface::class);
+    $putResponse->allows('getStatusCode')->andReturn(200);
+    $putResponse->allows('getHeaders')->with(false)->andReturn(['etag' => ['"new-etag"']]);
+
+    $client->expects('request')->with('GET', Mockery::any(), Mockery::any())->andReturn($getResponse);
+    $client->expects('request')->with('PUT', Mockery::any(), Mockery::on(function ($options) {
+        return str_contains($options['body'], 'DTSTART;TZID=Europe/Berlin:20260601T120000');
+    }))->andReturn($putResponse);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action'     => 'edit_event',
+        'event_uri'  => CAL_EVENT_URI,
+        'etag'       => CAL_ETAG_VALUE,
+        'summary'    => 'Berlin Meeting',
+        'start_date' => '2026-06-01T12:00:00',
+        'end_date'   => '2026-06-01T13:00:00',
+        'timezone'   => 'Europe/Berlin',
+    ], 1);
+
+    expect($result->success)->toBeTrue();
+});
+
 it('create_event returns error if required params are missing', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $client = Mockery::mock(HttpClientInterface::class);
