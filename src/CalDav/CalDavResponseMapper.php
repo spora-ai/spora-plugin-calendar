@@ -97,13 +97,21 @@ final class CalDavResponseMapper
         $statusCode = $response->getStatusCode();
         if ($statusCode === 201) {
             $etag = $response->getHeaders(false)['etag'][0] ?? null;
-            return new ToolResult(true, "Event '{$summary}' created successfully.", [
-                'status'     => 'ok',
-                'action'     => 'create_event',
-                'event_uri'  => $eventUri,
-                'uid'        => $uid,
-                'etag'       => $etag,
-            ]);
+            $etagDisplay = $etag ?? '(server did not return an ETag)';
+            // E1: surface the assigned URI + UID + ETag in the human-readable
+            // text too — without this, follow-up edits have to round-trip
+            // through list_events just to discover what URI the server wrote.
+            return new ToolResult(
+                true,
+                "Event '{$summary}' created successfully.\nURI: {$eventUri}\nUID: {$uid}\nETag: {$etagDisplay}",
+                [
+                    'status'    => 'ok',
+                    'action'    => 'create_event',
+                    'event_uri' => $eventUri,
+                    'uid'       => $uid,
+                    'etag'      => $etag,
+                ],
+            );
         }
         return new ToolResult(true, "Event '{$summary}' created successfully.", [
             'status' => 'ok',

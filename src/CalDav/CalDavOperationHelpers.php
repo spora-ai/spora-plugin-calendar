@@ -240,10 +240,11 @@ final class CalDavOperationHelpers
 
     /**
      * Edit inputs are accepted with or without an ETag. If the caller did
-     * not supply one, the edit flow reuses the ETag that comes back from
-     * the GET it already does to merge unchanged fields (RFC 7232 §4.3.1).
-     * Convenience for callers that only have the URI at hand — the
-     * existing edit flow issues the GET regardless.
+     * not supply one, OR supplied a non-RFC-7232 placeholder like
+     * "initial" / "none", the edit flow reuses the ETag that comes back
+     * from the GET it already does to merge unchanged fields
+     * (RFC 7232 §4.3.1). The GET is issued regardless, so the
+     * convenience mode is free of cost.
      *
      * @return array{eventUri: string, etag: string, timezone: string, allDay: bool}|ToolResult
      */
@@ -253,9 +254,12 @@ final class CalDavOperationHelpers
         if ($eventUri === '') {
             return $this->errorResult('edit_event', self::ERR_MISSING_EVENT_URI, 'missing_parameter', null, 'event_uri');
         }
+        $candidate = $this->client->normalizeEtag(trim((string) ($arguments['etag'] ?? '')));
         return [
             'eventUri' => $eventUri,
-            'etag'     => $this->client->normalizeEtag(trim((string) ($arguments['etag'] ?? ''))),
+            // Trusted ETag goes through; anything else is replaced by the
+            // server-fetched one in loadEditPayload().
+            'etag'     => $this->client->isTrustedEtag($candidate) ? $candidate : '',
             'timezone' => trim((string) ($arguments['timezone'] ?? '')),
             'allDay'   => (bool) ($arguments['all_day'] ?? false),
         ];

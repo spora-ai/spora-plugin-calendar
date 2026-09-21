@@ -296,6 +296,28 @@ final class CalDavClient
     }
 
     /**
+     * Decide whether a caller-supplied ETag should be trusted, or whether
+     * the edit flow should fetch a fresh one from the server first.
+     *
+     * O3 placeholder detection: agents frequently echo back obvious
+     * non-values ("initial", "none", "todo", "unknown") that pass the
+     * syntactic RFC 7232 check after `normalizeEtag()` but are guaranteed
+     * 412s on the wire. Reject anything that doesn't look like a real
+     * opaque-tag payload — at minimum an MD5 / SHA / hex string. The
+     * server is still the source of truth (the GET wins on collision),
+     * so this is strictly safer than trusting the caller's string.
+     */
+    public function isTrustedEtag(string $etag): bool
+    {
+        if ($etag === '') {
+            return false;
+        }
+        // Real CalDAV servers emit hex/alpha opaque tags inside the quotes.
+        // 8 chars is the floor (matches Apache mod_dav's MD5 default).
+        return preg_match('/^(W\/)?"[A-Za-z0-9._\-+]{8,}"$/', $etag) === 1;
+    }
+
+    /**
      * @param array<string, array<int, string>> $headers
      */
     public function logHttpError(string $method, string $url, int $statusCode, string $responseBody, array $headers): void

@@ -10,16 +10,19 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
 const CAL_BASE_URL = 'https://cal.example.com/';
 const CAL_EVENT_URI = 'https://cal.example.com/events/1.ics';
 const CAL_CALDAV_URL = 'https://caldav.example.com/begenda/dav/user@example.com/calendar';
-const CAL_ETAG_VALUE = '"abc123"';
+// Realistic-looking ETags (32 hex chars inside quotes, what Apache
+// mod_dav / Sabre/dav emit). Anything shorter fails isTrustedEtag() and
+// is treated as a placeholder for O3 auto-fetch.
+const CAL_ETAG_VALUE = '"c0132e68de75ac9e495ae4b175e1e39d"';
 const CAL_END_DATE_APR = '2026-04-30T00:00:00Z';
 const CAL_START_DATE_APR = '2026-04-01T00:00:00Z';
 const CAL_MSG_INCOMPLETE = 'CalDAV configuration is incomplete';
 const CAL_MSG_DELETED = 'deleted successfully';
-const CAL_ETAG_ABC = '"abc"';
+const CAL_ETAG_ABC = '"0123456789abcdef0123456789abcdef"';
 const CAL_END_DATE_JUN = '2026-06-01T11:00:00Z';
 const CAL_SUMMARY_TEST = 'Test Event';
 const CAL_START_DATE_JUN = '2026-06-01T10:00:00Z';
-const CAL_NEW_ETAG = '"new-etag"';
+const CAL_NEW_ETAG = '"deadbeefdeadbeefdeadbeefdeadbeef"';
 const CAL_MSG_CREATED = 'created successfully';
 const CAL_NEW_TITLE = 'New Title';
 const CAL_INTERNAL_ERROR = 'Internal Server Error';
@@ -952,7 +955,7 @@ it('edit_event normalizes unquoted etag from user', function () {
     $result = $tool->execute([
         'action' => 'edit_event',
         'event_uri' => CAL_EVENT_URI,
-        'etag' => 'abc123',  // no quotes!
+        'etag' => 'c0132e68de75ac9e495ae4b175e1e39d',  // no quotes, 32 hex chars
         'summary' => CAL_NEW_TITLE,
     ], 1);
 
@@ -1067,10 +1070,54 @@ it('edit_event catches Throwable during PUT and returns error', function () {
         ->and($result->content)->toContain('connection reset');
 });
 
-it('edit_event auto-fetches the ETag when none is supplied (O3)', function () {
-    // O3: when the caller doesn't supply an ETag, the edit flow fetches
+it('edit_event auto-fetches the ETag when blank or a placeholder (O3)', function () {
+    // O3: when the caller doesn't supply an ETag, OR supplies a non-RFC
+    // placeholder ("initial", "none", "todo"), the edit flow fetches
     // the existing event (which it does anyway for field merging) and
     // uses that ETag for the conditional PUT.
+    foreach (['', 'initial', 'none', 'todo'] as $placeholder) {
+        $config = Mockery::mock(ToolConfigService::class);
+        $config->allows('getEffectiveSettings')->andReturn([
+            'url' => CAL_BASE_URL,
+            'username' => 'u',
+            'password' => 'p',
+        ]);
+
+        $client = Mockery::mock(HttpClientInterface::class);
+
+        $getResponse = Mockery::mock(ResponseInterface::class);
+        $getResponse->allows('getStatusCode')->andReturn(200);
+        $getResponse->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_ETAG_VALUE]]);
+        $getResponse->allows('getContent')->andReturn("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:o3-fetch\r\nSUMMARY:Original\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR");
+
+        $putResponse = Mockery::mock(ResponseInterface::class);
+        $putResponse->allows('getStatusCode')->andReturn(200);
+        $putResponse->allows('getHeaders')->with(false)->andReturn(['etag' => ['"new"']]);
+
+        $client->expects('request')->with('GET', CAL_EVENT_URI, Mockery::any())->andReturn($getResponse);
+        // PUT must carry the fetched ETag, not the placeholder.
+        $client->expects('request')->with('PUT', CAL_EVENT_URI, Mockery::on(function ($options) {
+            return $options['headers']['If-Match'] === CAL_ETAG_VALUE;
+        }))->andReturn($putResponse);
+
+        $tool = new CalDavCalendarTool($config, $client);
+        $result = $tool->execute([
+            'action' => 'edit_event',
+            'event_uri' => CAL_EVENT_URI,
+            'etag'  => $placeholder, // blank OR obvious placeholder
+            'summary' => 'Updated title',
+        ], 1);
+
+        expect($result->success)->toBeTrue("placeholder '{$placeholder}' should auto-fetch")
+            ->and($result->content)->toContain('updated successfully');
+    }
+});
+
+it('edit_event trusts a caller-supplied ETag that looks like a real opaque tag', function () {
+    // Counter-test for O3: a syntactically real ETag (32-char hex inside
+    // quotes, what Apache mod_dav emits) must NOT be replaced by the
+    // fetched one — the caller may have deliberately fetched the latest
+    // value and we should respect it.
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->andReturn([
         'url' => CAL_BASE_URL,
@@ -1083,28 +1130,27 @@ it('edit_event auto-fetches the ETag when none is supplied (O3)', function () {
     $getResponse = Mockery::mock(ResponseInterface::class);
     $getResponse->allows('getStatusCode')->andReturn(200);
     $getResponse->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_ETAG_VALUE]]);
-    $getResponse->allows('getContent')->andReturn("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:o3-fetch\r\nSUMMARY:Original\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR");
+    $getResponse->allows('getContent')->andReturn("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:o3-trust\r\nSUMMARY:Original\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR");
 
     $putResponse = Mockery::mock(ResponseInterface::class);
     $putResponse->allows('getStatusCode')->andReturn(200);
     $putResponse->allows('getHeaders')->with(false)->andReturn(['etag' => ['"new"']]);
 
     $client->expects('request')->with('GET', CAL_EVENT_URI, Mockery::any())->andReturn($getResponse);
-    // PUT must carry the fetched ETag, not the literal caller input.
     $client->expects('request')->with('PUT', CAL_EVENT_URI, Mockery::on(function ($options) {
-        return $options['headers']['If-Match'] === CAL_ETAG_VALUE;
+        // Use the caller-supplied real etag, not the fetched one.
+        return $options['headers']['If-Match'] === '"c0132e68de75ac9e495ae4b175e1e39d"';
     }))->andReturn($putResponse);
 
     $tool = new CalDavCalendarTool($config, $client);
     $result = $tool->execute([
         'action' => 'edit_event',
         'event_uri' => CAL_EVENT_URI,
-        // no etag — flow must auto-fetch
-        'summary'  => 'Updated title',
+        'etag'  => 'c0132e68de75ac9e495ae4b175e1e39d', // real-looking, gets normalized
+        'summary' => 'Updated',
     ], 1);
 
-    expect($result->success)->toBeTrue()
-        ->and($result->content)->toContain('updated successfully');
+    expect($result->success)->toBeTrue();
 });
 
 it('delete_event returns Precondition Failed when server returns HTTP 412', function () {
@@ -1230,7 +1276,11 @@ it('create_event sends If-None-Match: * for idempotency (B1)', function () {
     expect($result->success)->toBeTrue();
 });
 
-it('create_event returns assigned URI, UID, and ETag in data (E1)', function () {
+it('create_event returns assigned URI, UID, and ETag in data AND text (E1)', function () {
+    // E1: the URI/UID/ETag must appear in BOTH the structured data
+    // (for programmatic consumers) AND the text content (so a human
+    // reading the chat sees them and a follow-up edit doesn't have to
+    // round-trip through list_events just to discover the URI).
     $config = Mockery::mock(ToolConfigService::class);
     $config->allows('getEffectiveSettings')->andReturn([
         'url' => CAL_BASE_URL,
@@ -1258,7 +1308,12 @@ it('create_event returns assigned URI, UID, and ETag in data (E1)', function () 
         ->and($result->data['action'])->toBe('create_event')
         ->and($result->data['event_uri'])->toBeString()
         ->and($result->data['uid'])->toBeString()
-        ->and($result->data['etag'])->toBe(CAL_NEW_ETAG);
+        ->and($result->data['etag'])->toBe(CAL_NEW_ETAG)
+        // The same identifiers must be in the human-readable text so
+        // the user + the LLM can act on them without parsing data.
+        ->and($result->content)->toContain('URI:')
+        ->and($result->content)->toContain('UID:')
+        ->and($result->content)->toContain('ETag: ' . CAL_NEW_ETAG);
 });
 
 it('list_events auto-expands YYYY-MM-DD to T00:00:00 / T23:59:59 (B2)', function () {

@@ -244,3 +244,20 @@ it('falls back to an unknown auth_method value to auto behavior', function () {
         'auth_basic'  => ['u', 'p'],
     ]);
 });
+
+it('isTrustedEtag accepts real-looking opaque tags and rejects placeholders', function () {
+    $client = new CalDavClient(Mockery::mock(HttpClientInterface::class));
+
+    // Real Apache mod_dav / Sabre/dav output
+    expect($client->isTrustedEtag('"c0132e68de75ac9e495ae4b175e1e39d"'))->toBeTrue();
+    expect($client->isTrustedEtag('"deadbeefdeadbeefdeadbeefdeadbeef"'))->toBeTrue();
+    expect($client->isTrustedEtag('W/"abc1234567890abcdef"'))->toBeTrue();
+
+    // O3 placeholders — agents echo these back when they don't have a real value
+    expect($client->isTrustedEtag(''))->toBeFalse();
+    expect($client->isTrustedEtag('"initial"'))->toBeFalse();
+    expect($client->isTrustedEtag('"none"'))->toBeFalse();
+    expect($client->isTrustedEtag('"todo"'))->toBeFalse();
+    expect($client->isTrustedEtag('"abc"'))->toBeFalse(); // too short
+    expect($client->isTrustedEtag('not-quoted-at-all'))->toBeFalse();
+});
