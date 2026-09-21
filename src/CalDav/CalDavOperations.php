@@ -35,6 +35,16 @@ final class CalDavOperations
         return $this->helpers->dispatchListEventsRequest($dates, $config);
     }
 
+    public function listCalendars(int $agentId, ?int $userId): ToolResult
+    {
+        $config = $this->helpers->loadBaseConfig($agentId, $userId);
+        if ($config instanceof ToolResult) {
+            return $config;
+        }
+
+        return $this->helpers->dispatchListCalendarsRequest($config);
+    }
+
     public function getEvent(array $arguments, int $agentId, ?int $userId): ToolResult
     {
         $eventUri = trim((string) ($arguments['event_uri'] ?? ''));
@@ -111,7 +121,7 @@ final class CalDavOperations
         return ['inputs' => $inputs, 'dates' => $dates];
     }
 
-    /** @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult */
+    /** @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}}|ToolResult */
     private function loadEditContext(array $arguments, int $agentId, ?int $userId): array|ToolResult
     {
         $inputs = $this->helpers->parseEditInputs($arguments);
@@ -130,8 +140,8 @@ final class CalDavOperations
     }
 
     /**
-     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}} $ctx
-     * @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, updates: array{uid: ?string, summary: string, start: DateTimeImmutable, end: DateTimeImmutable, description: string, location: string}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}}|ToolResult
+     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}} $ctx
+     * @return array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, updates: array{uid: ?string, summary: string, start: DateTimeImmutable, end: DateTimeImmutable, description: string, location: string}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}}|ToolResult
      */
     private function loadEditPayload(array $arguments, array $ctx): array|ToolResult
     {
@@ -139,10 +149,21 @@ final class CalDavOperations
         if ($existing instanceof ToolResult) {
             return $existing;
         }
+        // O3: when the caller didn't pass an ETag, fall back to the one
+        // we just fetched so we can still send a conditional PUT.
+        if ($ctx['inputs']['etag'] === '') {
+            $ctx['inputs']['etag'] = $existing['etag'];
+        }
+        // P0: preserve the original timezone when caller didn't supply one.
+        // Without this, the re-write would emit floating local time and the
+        // wall-clock would silently drift on the next DST transition.
+        if ($ctx['inputs']['timezone'] === '') {
+            $ctx['inputs']['timezone'] = $existing['event']['timezone'] ?? '';
+        }
 
         $updates = $this->helpers->buildEditUpdates(
             $arguments,
-            $existing,
+            $existing['event'],
             $ctx['inputs']['timezone'],
             $ctx['inputs']['allDay'],
         );
@@ -159,7 +180,7 @@ final class CalDavOperations
     }
 
     /**
-     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, settings: array<string, mixed>}} $ctx
+     * @param array{eventUri: string, inputs: array{eventUri: string, etag: string, timezone: string, allDay: bool}, config: array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>}} $ctx
      */
     private function executeEdit(array $arguments, array $ctx, int $agentId): ToolResult
     {

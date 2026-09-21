@@ -33,6 +33,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
     category: 'productivity',
 )]
 #[ToolOperation(name: 'list_events', description: 'Fetch upcoming events from CalDAV calendar within a date range', enabledByDefault: true, requiresApprovalByDefault: false)]
+#[ToolOperation(name: 'list_calendars', description: 'Discover the calendars available at the configured CalDAV URL via PROPFIND (Depth: 1)', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'get_event', description: 'Get details of a specific event by its CalDAV URI', enabledByDefault: true, requiresApprovalByDefault: false)]
 #[ToolOperation(name: 'create_event', description: 'Create a new event on the CalDAV calendar', enabledByDefault: true, requiresApprovalByDefault: true)]
 #[ToolOperation(name: 'edit_event', description: 'Edit an existing event on the CalDAV calendar', enabledByDefault: true, requiresApprovalByDefault: true)]
@@ -40,6 +41,18 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 #[ToolSetting(key: 'url', label: 'CalDAV URL', type: 'text', description: 'URL to the Calendar server (e.g. Nextcloud, Baikal)', )]
 #[ToolSetting(key: 'username', label: 'Username', type: 'text', description: 'CalDAV username', )]
 #[ToolSetting(key: 'password', label: 'Password', type: 'password', description: 'CalDAV password or app token', required: true)]
+#[ToolSetting(
+    key: 'auth_method',
+    label: 'Auth Method',
+    type: 'select',
+    description: 'HTTP authentication scheme. Auto sends Basic first and falls back to Digest on a 401 challenge (covers Nextcloud, Baikal, all-inkl, Cyrus).',
+    options: [
+        'auto'   => 'Auto (Basic then Digest)',
+        'basic'  => 'Basic only',
+        'digest' => 'Digest only',
+    ],
+    default: 'auto',
+)]
 #[ToolSetting(
     key: 'http_timeout',
     label: 'HTTP Timeout',
@@ -49,15 +62,15 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 )]
 // Parameter declaration order matches the hand-rolled schema so the approval UI
 // renders fields in the same sequence. `action` is auto-synthesized.
-#[ToolParameter(name: 'start_date', type: 'string', description: 'Start date in ISO-8601 format (or YYYY-MM-DD for all_day events)', required: ['list_events', 'create_event'])]
-#[ToolParameter(name: 'end_date', type: 'string', description: 'End date in ISO-8601 format (or YYYY-MM-DD for all_day events)', required: ['list_events', 'create_event'])]
-#[ToolParameter(name: 'event_uri', type: 'string', description: 'The CalDAV URI of the event (required for get_event, edit_event, delete_event)', required: ['get_event', 'edit_event', 'delete_event'])]
-#[ToolParameter(name: 'etag', type: 'string', description: 'The ETag of the event (required for edit_event, optional for delete_event)', required: ['edit_event'])]
-#[ToolParameter(name: 'summary', type: 'string', description: 'Event title/summary (required for create_event)', required: ['create_event'])]
-#[ToolParameter(name: 'description', type: 'string', description: 'Event description (optional)', required: false)]
-#[ToolParameter(name: 'location', type: 'string', description: 'Event location (optional)', required: false)]
-#[ToolParameter(name: 'timezone', type: 'string', description: 'IANA timezone identifier (e.g. Europe/Berlin). Optional for create_event and edit_event.', required: false)]
-#[ToolParameter(name: 'all_day', type: 'boolean', description: 'If true, start_date and end_date are interpreted as date-only (YYYY-MM-DD) and the event is an all-day event. Optional.', required: false)]
+#[ToolParameter(name: 'start_date', type: 'string', description: 'Start of the date range. ISO-8601 datetime (e.g. "2026-09-22T09:00:00"), or YYYY-MM-DD (auto-expanded to T00:00:00 / T23:59:59). For all_day events, pass a date-only string and set all_day=true.', required: ['list_events', 'create_event'])]
+#[ToolParameter(name: 'end_date', type: 'string', description: 'End of the date range. Same format rules as start_date. Must be after start_date.', required: ['list_events', 'create_event'])]
+#[ToolParameter(name: 'event_uri', type: 'string', description: 'The CalDAV URI of the event (required for get_event, edit_event, delete_event). Usually returned in the `event_uri` field of list_events / create_event results.', required: ['get_event', 'edit_event', 'delete_event'])]
+#[ToolParameter(name: 'etag', type: 'string', description: 'The ETag from a previous get_event / list_events call. Required for edit_event (optimistic concurrency); optional for delete_event.', required: ['edit_event'])]
+#[ToolParameter(name: 'summary', type: 'string', description: 'Event title. Max 255 characters. Required for create_event. Example: "Team standup".', required: ['create_event'])]
+#[ToolParameter(name: 'description', type: 'string', description: 'Free-text event description. Optional.', required: false)]
+#[ToolParameter(name: 'location', type: 'string', description: 'Event location as a free-form string. Optional.', required: false)]
+#[ToolParameter(name: 'timezone', type: 'string', description: 'IANA timezone identifier (e.g. "Europe/Berlin", "America/New_York"). Applies to start_date and end_date. Optional — defaults to UTC.', required: false)]
+#[ToolParameter(name: 'all_day', type: 'boolean', description: 'When true, start_date and end_date are interpreted as date-only (YYYY-MM-DD) and the event is an all-day event. Defaults to false.', required: false)]
 final class CalDavCalendarTool extends AbstractTool
 {
     private readonly CalDavOperations $operations;
@@ -88,12 +101,13 @@ final class CalDavCalendarTool extends AbstractTool
         $operation = $this->getOperationName($arguments);
 
         return match ($operation) {
-            'list_events'  => $this->operations->listEvents($arguments, $agentId, $ownerId),
-            'get_event'    => $this->operations->getEvent($arguments, $agentId, $ownerId),
-            'create_event' => $this->operations->createEvent($arguments, $agentId, $ownerId),
-            'edit_event'   => $this->operations->editEvent($arguments, $agentId, $ownerId),
-            'delete_event' => $this->operations->deleteEvent($arguments, $agentId, $ownerId),
-            default        => new ToolResult(false, "Unknown operation: {$operation}"),
+            'list_events'    => $this->operations->listEvents($arguments, $agentId, $ownerId),
+            'list_calendars' => $this->operations->listCalendars($agentId, $ownerId),
+            'get_event'      => $this->operations->getEvent($arguments, $agentId, $ownerId),
+            'create_event'   => $this->operations->createEvent($arguments, $agentId, $ownerId),
+            'edit_event'     => $this->operations->editEvent($arguments, $agentId, $ownerId),
+            'delete_event'   => $this->operations->deleteEvent($arguments, $agentId, $ownerId),
+            default          => new ToolResult(false, "Unknown operation: {$operation}"),
         };
     }
 
@@ -102,12 +116,13 @@ final class CalDavCalendarTool extends AbstractTool
         $operation = $this->getOperationName($arguments);
 
         return match ($operation) {
-            'list_events'  => 'Fetch CalDAV calendar events',
-            'get_event'    => 'Get a specific CalDAV calendar event',
-            'create_event' => 'Create a new CalDAV calendar event',
-            'edit_event'   => 'Edit an existing CalDAV calendar event',
-            'delete_event' => 'Delete a CalDAV calendar event',
-            default        => 'Unknown CalDAV operation',
+            'list_events'    => 'Fetch CalDAV calendar events',
+            'list_calendars' => 'Discover CalDAV calendars at the configured URL',
+            'get_event'      => 'Get a specific CalDAV calendar event',
+            'create_event'   => 'Create a new CalDAV calendar event',
+            'edit_event'     => 'Edit an existing CalDAV calendar event',
+            'delete_event'   => 'Delete a CalDAV calendar event',
+            default          => 'Unknown CalDAV operation',
         };
     }
 }

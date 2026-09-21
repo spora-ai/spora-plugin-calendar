@@ -48,13 +48,98 @@ final class IcsParser
 
         $eventData = $this->collectEventsFromMultistatus($parser);
         if ($eventData === []) {
-            return new ToolResult(true, 'No events found in the specified time range.');
+            return new ToolResult(true, 'No events found in the specified time range.', [
+                'status'  => 'ok',
+                'action'  => 'list_events',
+                'events'  => [],
+                'count'   => 0,
+            ]);
         }
 
         return new ToolResult(
             true,
             "Found " . count($eventData) . " events:\n\n" . $this->formatEventRows($eventData),
-            ['events' => $eventData],
+            [
+                'status' => 'ok',
+                'action' => 'list_events',
+                'events' => $eventData,
+                'count'  => count($eventData),
+            ],
+        );
+    }
+
+    /**
+     * Parse a PROPFIND multistatus response into a list of available
+     * calendars. Filters to entries whose resourcetype contains
+     * <c:calendar/> so non-calendar collections (address books, etc.)
+     * don't pollute the result.
+     *
+     * @return ToolResult with `data.calendars[]` = list of {href, name}
+     */
+    public function parseCalendarListResponse(string $xmlBody): ToolResult
+    {
+        $parser = new DOMDocument();
+        $previousUseErrors = libxml_use_internal_errors(true);
+        try {
+            $loaded = $parser->loadXML($xmlBody);
+            $loadErrors = libxml_get_errors();
+            libxml_clear_errors();
+        } finally {
+            libxml_use_internal_errors($previousUseErrors);
+        }
+
+        if ($loaded === false) {
+            return $this->malformedXmlResult($loadErrors);
+        }
+
+        $xpath = new DOMXPath($parser);
+        $xpath->registerNamespace('d', 'DAV:');
+        $xpath->registerNamespace('c', 'urn:ietf:params:xml:ns:caldav');
+
+        $calendars = [];
+        $responses = $xpath->query('//d:response');
+        if ($responses === false) {
+            $responses = new DOMNodeList();
+        }
+        foreach ($responses as $response) {
+            $href = $xpath->query('d:href', $response)->item(0)?->textContent;
+            if ($href === null || $href === '') {
+                continue;
+            }
+            $isCalendar = $xpath->query('.//c:calendar', $response)->length > 0;
+            if (!$isCalendar) {
+                continue;
+            }
+            $nameNode = $xpath->query('d:propstat/d:prop/d:displayname', $response)->item(0);
+            $name = $nameNode !== null ? trim($nameNode->textContent) : '';
+            $calendars[] = [
+                'href' => trim($href),
+                'name' => trim($name),
+            ];
+        }
+
+        if ($calendars === []) {
+            return new ToolResult(true, 'No calendars found at the configured URL.', [
+                'status'    => 'ok',
+                'action'    => 'list_calendars',
+                'calendars' => [],
+                'count'     => 0,
+            ]);
+        }
+
+        $rows = [];
+        foreach ($calendars as $cal) {
+            $rows[] = "- {$cal['name']} ({$cal['href']})";
+        }
+        return new ToolResult(
+            true,
+            "Found " . count($calendars) . " calendars:\n\n" . implode("\n", $rows),
+            [
+                'status'    => 'ok',
+                'action'    => 'list_calendars',
+                'calendars' => $calendars,
+                'count'     => count($calendars),
+            ],
         );
     }
 
@@ -65,8 +150,20 @@ final class IcsParser
     {
         $event = $this->firstVEvent($icsContent);
         if ($event === null) {
-            return new ToolResult(false, 'No VEVENT found in the calendar data.');
+            return new ToolResult(false, 'No VEVENT found in the calendar data.', [
+                'status' => 'error',
+                'action' => 'get_event',
+                'reason' => 'no_vevent',
+            ]);
         }
+
+        // P0: the library's $event->getDtStart() returns just the date value,
+        // losing the TZID parameter. Walk the raw properties so we can
+        // surface the original timezone context to the caller — without it,
+        // an agent that edits the event would re-write it as floating local
+        // time, silently shifting wall-clock across DST boundaries.
+        [$dtstartRaw, $dtstartTzid] = $this->extractDateProperty($event, 'DTSTART');
+        [$dtendRaw,   $dtendTzid]   = $this->extractDateProperty($event, 'DTEND');
 
         $details = new EventDetails(
             uid: $event->getUid(),
@@ -78,11 +175,15 @@ final class IcsParser
         );
 
         return new ToolResult(true, $this->formatGetEventOutput($eventUri, $etag, $details), [
+            'status'      => 'ok',
+            'action'      => 'get_event',
             'event_uri'   => $eventUri,
             'uid'         => $details->uid,
             'summary'     => $details->summary,
-            'dtstart'     => $details->dtstart,
-            'dtend'       => $details->dtend,
+            'dtstart'     => $dtstartRaw,
+            'dtend'       => $dtendRaw,
+            'dtstart_tzid' => $dtstartTzid,
+            'dtend_tzid'   => $dtendTzid,
             'description' => $details->description,
             'location'    => $details->location,
             'etag'        => $etag,
@@ -90,11 +191,43 @@ final class IcsParser
     }
 
     /**
+     * Walk the event's raw properties and extract the value + TZID for
+     * a given date-time property (DTSTART / DTEND).
+     *
+     * The craigk5n library exposes only the value via getDtStart()/getDtEnd();
+     * the TZID parameter is lost unless we iterate the property bag.
+     *
+     * @return array{0: ?string, 1: ?string} [value, tzid]
+     */
+    private function extractDateProperty(VEvent $event, string $propertyName): array
+    {
+        foreach ($event->getProperties() as $property) {
+            if (strcasecmp($property->getName(), $propertyName) !== 0) {
+                continue;
+            }
+            $value = $property->getValue()->getRawValue();
+            $tzid = null;
+            foreach ($property->getParameters() as $key => $paramValue) {
+                if (strcasecmp($key, 'TZID') === 0) {
+                    $tzid = (string) $paramValue;
+                    break;
+                }
+            }
+            return [$value, $tzid];
+        }
+        return [null, null];
+    }
+
+    /**
      * Parse a VCALENDAR body and return the first VEVENT as a flat array
      * suitable for `edit_event`'s merge step. Returns a stub if the body has
      * no VEVENT (caller treats that as an "incomplete" event).
      *
-     * @return array{uid: ?string, summary: string, dtstart: ?DateTimeImmutable, dtend: ?DateTimeImmutable, description: string, location: string}
+     * Includes the original TZID so the builder can re-emit the event with
+     * the same timezone context — without it, the wire payload drops to
+     * floating local time and the wall-clock drifts across DST boundaries.
+     *
+     * @return array{uid: ?string, summary: string, dtstart: ?DateTimeImmutable, dtend: ?DateTimeImmutable, description: string, location: string, timezone: ?string}
      */
     public function parseEventForEdit(string $icsContent): array
     {
@@ -108,16 +241,25 @@ final class IcsParser
                 'dtend'       => null,
                 'description' => '',
                 'location'    => '',
+                'timezone'    => null,
             ];
         }
+
+        // P0: pull the TZID from the raw DTSTART/DTEND properties and parse
+        // the datetimes with that timezone context — otherwise the DateTime
+        // ends up floating and a subsequent setTimezone() to the new
+        // target TZ would shift the wall-clock across DST boundaries.
+        [$startRaw, $startTzid] = $this->extractDateProperty($event, 'DTSTART');
+        [$endRaw,   $endTzid]   = $this->extractDateProperty($event, 'DTEND');
 
         return [
             'uid'         => $event->getUid() ?? '',
             'summary'     => $event->getSummary() ?? '',
-            'dtstart'     => $this->parseIcsDateString($event->getDtStart() ?? ''),
-            'dtend'       => $this->parseIcsDateString($event->getDtEnd() ?? ''),
+            'dtstart'     => $this->parseIcsDateString($startRaw, $startTzid),
+            'dtend'       => $this->parseIcsDateString($endRaw, $endTzid),
             'description' => $event->getDescription() ?? '',
             'location'    => $event->getLocation() ?? '',
+            'timezone'    => $startTzid,
         ];
     }
 
@@ -240,17 +382,6 @@ final class IcsParser
         return $eventUri;
     }
 
-    private function parseIcsDateString(?string $dateStr): ?DateTimeImmutable
-    {
-        if ($dateStr === null || $dateStr === '') {
-            return null;
-        }
-        if (strlen($dateStr) === 8 || str_ends_with($dateStr, 'Z')) {
-            return $this->parseIcsDateVariant($dateStr);
-        }
-        return $this->parseIcsDateWithTimezone($dateStr) ?? $this->parseIcsDateGeneric($dateStr);
-    }
-
     private function parseIcsDateVariant(string $dateStr): ?DateTimeImmutable
     {
         if (str_ends_with($dateStr, 'Z')) {
@@ -281,6 +412,51 @@ final class IcsParser
         return $parsed instanceof DateTimeImmutable ? $parsed->setTimezone($tz) : null;
     }
 
+    private function parseIcsDateString(?string $dateStr, ?string $tzid = null): ?DateTimeImmutable
+    {
+        if ($dateStr === null || $dateStr === '') {
+            return null;
+        }
+        // P0 round-trip: when the source DTSTART carried a TZID parameter,
+        // parse the value as local time in that zone so a subsequent
+        // setTimezone() doesn't shift the wall-clock.
+        if ($tzid !== null && $tzid !== ''
+            && !str_ends_with($dateStr, 'Z') && strlen($dateStr) !== 8
+            && ($parsed = $this->parseIcsDateWithTzid($dateStr, $tzid)) !== null) {
+            return $parsed;
+        }
+        return $this->parseIcsDateFallback($dateStr);
+    }
+
+    /**
+     * Parse a date-time value as local time in the given TZID zone.
+     * Returns null on bad TZID or bad date string.
+     */
+    private function parseIcsDateWithTzid(string $dateStr, string $tzid): ?DateTimeImmutable
+    {
+        try {
+            $tz = new DateTimeZone($tzid);
+            $parsed = DateTimeImmutable::createFromFormat(self::ICS_DATETIME_LOCAL, $dateStr, $tz);
+            return $parsed instanceof DateTimeImmutable ? $parsed->setTimezone($tz) : null;
+        } catch (Throwable) {
+            // Invalid TZID — fall back to the generic parser in the caller.
+            return null;
+        }
+    }
+
+    /**
+     * Parse a date-time without an explicit TZID: try the bare UTC/date
+     * variant first, then the `;TZID=…:…` form, then DateTime's native
+     * constructor as a last resort.
+     */
+    private function parseIcsDateFallback(string $dateStr): ?DateTimeImmutable
+    {
+        if (strlen($dateStr) === 8 || str_ends_with($dateStr, 'Z')) {
+            return $this->parseIcsDateVariant($dateStr);
+        }
+        return $this->parseIcsDateWithTimezone($dateStr) ?? $this->parseIcsDateGeneric($dateStr);
+    }
+
     /**
      * Last-resort parser that hands the string to DateTimeImmutable's
      * native constructor. Returns null on parse failure.
@@ -301,7 +477,11 @@ final class IcsParser
     {
         $firstError = $loadErrors[0] ?? null;
         $detail = $firstError instanceof LibXMLError ? trim($firstError->message) : 'malformed XML';
-        return new ToolResult(false, "CalDAV response could not be parsed: {$detail}");
+        return new ToolResult(false, "CalDAV response could not be parsed: {$detail}", [
+            'status'  => 'error',
+            'reason'  => 'malformed_xml',
+            'message' => $detail,
+        ]);
     }
 
     /**

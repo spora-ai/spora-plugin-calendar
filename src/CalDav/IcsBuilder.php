@@ -113,8 +113,17 @@ final class IcsBuilder
     private function applyDates(VEvent $event, DateTimeImmutable $start, DateTimeImmutable $end, string $timezone, bool $allDay): void
     {
         if ($allDay) {
-            $event->setDtStart($start->format('Ymd'));
-            $event->setDtEnd($end->format('Ymd'));
+            $startDate = $start->format('Ymd');
+            $endDate   = $end->format('Ymd');
+            // RFC 5545 §3.6.1: DTEND must be strictly after DTSTART for
+            // all-day events (DTEND is exclusive). When the caller passes
+            // the same date for start and end (a single-day all-day event),
+            // bump DTEND by one day so the wire payload is RFC-compliant.
+            if ($endDate <= $startDate) {
+                $endDate = $start->modify('+1 day')->format('Ymd');
+            }
+            $event->setDtStart($startDate);
+            $event->setDtEnd($endDate);
             return;
         }
 
