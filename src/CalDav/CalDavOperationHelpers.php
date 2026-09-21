@@ -292,13 +292,27 @@ final class CalDavOperationHelpers
      *  @return array{start: DateTimeImmutable, end: DateTimeImmutable}|ToolResult */
     public function parseCreateDates(array $inputs): array|ToolResult
     {
+        // B2 mirror: for non-all_day requests, expand bare YYYY-MM-DD
+        // inputs to a full-day range. start_date=YYYY-MM-DD → T00:00:00,
+        // end_date=YYYY-MM-DD → T23:59:59, so a single-day timed request
+        // covers the whole day. All-day requests leave the input alone.
+        $startStr = $inputs['allDay']
+            ? $inputs['start_date']
+            : $this->expandDateOnly($inputs['start_date'], false);
+        $endStr   = $inputs['allDay']
+            ? $inputs['end_date']
+            : $this->expandDateOnly($inputs['end_date'], true);
         try {
-            $start = $this->builder->parseEventDate($inputs['start_date'], $inputs['timezone'], $inputs['allDay']);
-            $end   = $this->builder->parseEventDate($inputs['end_date'], $inputs['timezone'], $inputs['allDay']);
+            $start = $this->builder->parseEventDate($startStr, $inputs['timezone'], $inputs['allDay']);
+            $end   = $this->builder->parseEventDate($endStr, $inputs['timezone'], $inputs['allDay']);
         } catch (Throwable $e) {
             return $this->errorResult('create_event', 'Invalid date format: ' . $e->getMessage(), 'invalid_date', 'Use ISO-8601 (e.g. "2026-09-22T09:00:00") or YYYY-MM-DD for all_day events.');
         }
-        if ($end <= $start) {
+        // All-day events accept start == end (a single-day event) — the
+        // builder bumps DTEND by one day to satisfy RFC 5545 §3.6.1.
+        // Timed events still require strict end > start.
+        $strictEnd = $inputs['allDay'] ? $end < $start : $end <= $start;
+        if ($strictEnd) {
             return $this->errorResult('create_event', self::ERR_END_BEFORE_START, 'end_before_start');
         }
         return ['start' => $start, 'end' => $end];

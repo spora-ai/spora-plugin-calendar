@@ -122,7 +122,12 @@ final class CalDavResponseMapper
     public function handleCreateError(int $statusCode): ToolResult
     {
         if ($statusCode === 415) {
-            return $this->errorResult('create_event', $statusCode, 'Calendar server does not support event creation (unsupported media type).', 'Verify the calendar URL points at a real calendar collection, not the calendar-home.');
+            return $this->errorResult(
+                'create_event',
+                $statusCode,
+                'Calendar server rejected the event payload (HTTP 415 — unsupported media type).',
+                'The CalDAV server may not support all-day VEVENTs. Try create_event without all_day=true (the builder will encode it as a 24-hour timed event), or verify the URL points at a writable calendar collection.',
+            );
         }
         return $this->errorResult('create_event', $statusCode, "CalDAV server returned HTTP {$statusCode}");
     }
@@ -141,11 +146,15 @@ final class CalDavResponseMapper
     public function handlePutError(int $statusCode): ToolResult
     {
         if ($statusCode === 412) {
+            // The wording covers BOTH stale-ETag and event-gone cases:
+            // some CalDAV servers return 412 (instead of 404) when the
+            // target URI doesn't exist, so a literal "the event has been
+            // modified" is misleading on delete.
             return $this->errorResult(
                 'edit_event',
                 $statusCode,
-                'Precondition Failed: The event has been modified since you fetched it. Please fetch the latest version and try again.',
-                'Re-issue get_event to obtain the current ETag and retry.',
+                'Precondition Failed: the event no longer matches the supplied ETag. It may have been modified, or the URI may have been deleted on the server.',
+                'Re-issue get_event to confirm the URI exists, then retry with the new ETag.',
             );
         }
         if ($statusCode === 404) {

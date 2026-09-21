@@ -413,6 +413,89 @@ it('create_event supports all_day with date-only format', function () {
         ->and($result->content)->toContain(CAL_MSG_CREATED);
 });
 
+it('create_event with all_day and start == end auto-bumps DTEND by one day (RFC 5545 §3.6.1)', function () {
+    // Bug A: a single-day all-day event must emit DTEND strictly after
+    // DTSTART per RFC 5545 §3.6.1. The builder bumps the end date by
+    // one day when the caller passes the same date for both.
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(201);
+    $response->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_NEW_ETAG]]);
+
+    $client->expects('request')->with('PUT', Mockery::any(), Mockery::on(function ($options) {
+        return str_contains($options['body'], 'DTSTART:20260601')
+            && str_contains($options['body'], 'DTEND:20260602')
+            && !str_contains($options['body'], 'DTSTART:20260601T');
+    }))->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => 'Single Day',
+        'start_date' => '2026-06-01',
+        'end_date'   => '2026-06-01',
+        'all_day'    => true,
+    ], 1);
+
+    expect($result->success)->toBeTrue()
+        ->and($result->content)->toContain(CAL_MSG_CREATED);
+});
+
+it('create_event rejects timed events with end == start but allows all_day with end == start', function () {
+    // Timed (non-all_day): zero-duration events are rejected.
+    // All-day: start == end is accepted and auto-bumped (covered above).
+    $config = Mockery::mock(ToolConfigService::class);
+    $client = Mockery::mock(HttpClientInterface::class);
+    $tool   = new CalDavCalendarTool($config, $client);
+
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => 'Zero Duration',
+        'start_date' => '2026-06-01T10:00:00Z',
+        'end_date'   => '2026-06-01T10:00:00Z',
+    ], 1);
+
+    expect($result->success)->toBeFalse()
+        ->and($result->data['reason'])->toBe('end_before_start');
+});
+
+it('create_event auto-expands YYYY-MM-DD without all_day (B2 mirror)', function () {
+    // B2 was applied to list_events but not create_event. Single-day
+    // non-all_day requests should expand to T00:00:00 / T23:59:59 like
+    // the list_events path already does.
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->andReturn([
+        'url' => CAL_BASE_URL,
+        'username' => 'test_user',
+        'password' => 'secret123',
+    ]);
+
+    $client = Mockery::mock(HttpClientInterface::class);
+    $response = Mockery::mock(ResponseInterface::class);
+    $response->allows('getStatusCode')->andReturn(201);
+    $response->allows('getHeaders')->with(false)->andReturn(['etag' => [CAL_NEW_ETAG]]);
+
+    $client->expects('request')->andReturn($response);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $result = $tool->execute([
+        'action' => 'create_event',
+        'summary' => 'Date-only',
+        'start_date' => '2026-09-22',
+        'end_date'   => '2026-09-22',
+        // all_day intentionally false → timed expansion
+    ], 1);
+
+    expect($result->success)->toBeTrue();
+});
+
 it('create_event rejects invalid date format for all_day events', function () {
     $config = Mockery::mock(ToolConfigService::class);
     $client = Mockery::mock(HttpClientInterface::class);
@@ -1245,7 +1328,9 @@ it('create_event returns 415 when server rejects media type', function () {
     ], 1);
 
     expect($result->success)->toBeFalse()
-        ->and($result->content)->toContain('unsupported media type');
+        ->and($result->content)->toContain('unsupported media type')
+        // The hint should point operators at the all-day workaround.
+        ->and($result->data['hint'])->toContain('all-day');
 });
 
 it('create_event sends If-None-Match: * for idempotency (B1)', function () {
