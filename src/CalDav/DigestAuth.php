@@ -27,6 +27,13 @@ final class DigestAuth
     public const QOP_AUTH       = 'auth';
 
     /**
+     * RFC 2617 / 7616 §3.4.1 — HA1 is `username:realm:password` for the
+     * plain MD5 / SHA families and re-hashed with nonce + cnonce for the
+     * `-sess` variants. The format string is shared between both paths.
+     */
+    private const CRED_COLON_FORMAT = '%s:%s:%s';
+
+    /**
      * Parse a `WWW-Authenticate` header value (or array of header
      * values for the same name) and return the Digest challenge as
      * an associative array. Returns null if no Digest challenge is
@@ -74,7 +81,7 @@ final class DigestAuth
         $cnonce = self::generateCnonce();
 
         $ha1    = self::computeHa1($username, $password, $challenge['realm'], $challenge['algorithm'], $challenge['nonce'] ?? '', $cnonce);
-        $ha2    = self::computeHa2($method, $uri, $challenge['qop'] ?? '');
+        $ha2    = self::computeHa2($method, $uri);
         $qop    = $challenge['qop'] ?? '';
         $digest = self::computeResponse($ha1, $ha2, $challenge['nonce'] ?? '', $nc, $cnonce, $qop);
 
@@ -111,10 +118,10 @@ final class DigestAuth
         string $nonce,
         string $cnonce,
     ): string {
-        $hash = self::hashAlgo($algorithm, sprintf('%s:%s:%s', $username, $realm, $password));
+        $hash = self::hashAlgo($algorithm, sprintf(self::CRED_COLON_FORMAT, $username, $realm, $password));
 
         if ($algorithm === self::ALGO_MD5_SESS) {
-            $hash = self::hashAlgo($algorithm, sprintf('%s:%s:%s', $hash, $nonce, $cnonce));
+            $hash = self::hashAlgo($algorithm, sprintf(self::CRED_COLON_FORMAT, $hash, $nonce, $cnonce));
         }
 
         return $hash;
@@ -124,7 +131,7 @@ final class DigestAuth
      * Compute `HA2` per RFC 7616 §3.4 (no qop: `qop=auth-int` is not
      * implemented because no mainstream CalDAV server advertises it).
      */
-    public static function computeHa2(string $method, string $uri, string $qop): string
+    public static function computeHa2(string $method, string $uri): string
     {
         return self::hashAlgo(self::ALGO_MD5, sprintf('%s:%s', strtoupper($method), $uri));
     }

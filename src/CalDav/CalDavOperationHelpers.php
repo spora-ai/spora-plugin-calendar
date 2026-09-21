@@ -34,6 +34,7 @@ final class CalDavOperationHelpers
         private readonly IcsBuilder $builder,
         private readonly IcsParser $parser,
         private readonly CalDavResponseMapper $mapper,
+        private readonly CalDavXmlBuilder $xmlBuilder = new CalDavXmlBuilder(),
     ) {}
 
     public function getEventError(string $field): ToolResult
@@ -112,7 +113,7 @@ final class CalDavOperationHelpers
         $requestOptions = $this->buildRequestOptions(
             $config,
             ['Depth' => '1', 'Content-Type' => 'application/xml; charset=utf-8'],
-            $this->buildReportXml($dates[0], $dates[1]),
+            $this->xmlBuilder->buildReportXml($dates[0], $dates[1]),
         );
 
         return $this->mapper->runHttp(
@@ -132,7 +133,7 @@ final class CalDavOperationHelpers
         $requestOptions = $this->buildRequestOptions(
             $config,
             ['Depth' => '1', 'Content-Type' => 'application/xml; charset=utf-8'],
-            $this->buildPropfindXml(),
+            $this->xmlBuilder->buildPropfindXml(),
         );
 
         return $this->mapper->runHttp(
@@ -392,38 +393,6 @@ final class CalDavOperationHelpers
         return $dateStr;
     }
 
-    public function buildReportXml(string $startFormatted, string $endFormatted): string
-    {
-        return <<<XML
-<?xml version="1.0" encoding="utf-8" ?>
-<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
-    <d:prop>
-        <d:getetag />
-        <c:calendar-data />
-    </d:prop>
-    <c:filter>
-        <c:comp-filter name="VCALENDAR">
-            <c:comp-filter name="VEVENT">
-                <c:time-range start="{$startFormatted}" end="{$endFormatted}"/>
-            </c:comp-filter>
-        </c:comp-filter>
-    </c:filter>
-</c:calendar-query>
-XML;
-    }
-
-    public function buildPropfindXml(): string
-    {
-        return <<<XML
-<?xml version="1.0" encoding="utf-8" ?>
-<d:propfind xmlns:d="DAV:">
-    <d:prop>
-        <d:displayname />
-        <d:resourcetype />
-    </d:prop>
-</d:propfind>
-XML;
-    }
 
     /**
      * Fetch the existing event body so the edit flow can merge changed

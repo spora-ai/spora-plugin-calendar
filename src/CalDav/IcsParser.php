@@ -417,18 +417,40 @@ final class IcsParser
         if ($dateStr === null || $dateStr === '') {
             return null;
         }
-        if ($tzid !== null && $tzid !== '' && !str_ends_with($dateStr, 'Z') && strlen($dateStr) !== 8) {
-            // P0 round-trip: when the source DTSTART carried a TZID
-            // parameter, parse the value as local time in that zone so a
-            // subsequent setTimezone() doesn't shift the wall-clock.
-            try {
-                $tz = new DateTimeZone($tzid);
-                $parsed = DateTimeImmutable::createFromFormat(self::ICS_DATETIME_LOCAL, $dateStr, $tz);
-                return $parsed instanceof DateTimeImmutable ? $parsed->setTimezone($tz) : null;
-            } catch (Throwable) {
-                // Invalid TZID — fall through to the generic path.
-            }
+        // P0 round-trip: when the source DTSTART carried a TZID parameter,
+        // parse the value as local time in that zone so a subsequent
+        // setTimezone() doesn't shift the wall-clock.
+        if ($tzid !== null && $tzid !== ''
+            && !str_ends_with($dateStr, 'Z') && strlen($dateStr) !== 8
+            && ($parsed = $this->parseIcsDateWithTzid($dateStr, $tzid)) !== null) {
+            return $parsed;
         }
+        return $this->parseIcsDateFallback($dateStr);
+    }
+
+    /**
+     * Parse a date-time value as local time in the given TZID zone.
+     * Returns null on bad TZID or bad date string.
+     */
+    private function parseIcsDateWithTzid(string $dateStr, string $tzid): ?DateTimeImmutable
+    {
+        try {
+            $tz = new DateTimeZone($tzid);
+            $parsed = DateTimeImmutable::createFromFormat(self::ICS_DATETIME_LOCAL, $dateStr, $tz);
+            return $parsed instanceof DateTimeImmutable ? $parsed->setTimezone($tz) : null;
+        } catch (Throwable) {
+            // Invalid TZID — fall back to the generic parser in the caller.
+            return null;
+        }
+    }
+
+    /**
+     * Parse a date-time without an explicit TZID: try the bare UTC/date
+     * variant first, then the `;TZID=…:…` form, then DateTime's native
+     * constructor as a last resort.
+     */
+    private function parseIcsDateFallback(string $dateStr): ?DateTimeImmutable
+    {
         if (strlen($dateStr) === 8 || str_ends_with($dateStr, 'Z')) {
             return $this->parseIcsDateVariant($dateStr);
         }

@@ -75,7 +75,7 @@ it('reproduces the RFC 7616 §3.9.1 MD5 response vector', function () {
     );
     expect($ha1)->toBe('3d78807defe7de2157e2b0b6573a855f');
 
-    $ha2 = DigestAuth::computeHa2('GET', '/dir/index.html', 'auth');
+    $ha2 = DigestAuth::computeHa2('GET', '/dir/index.html');
     expect($ha2)->toBe('39aff3a2bab6126f332b942af96d3366');
 
     $response = DigestAuth::computeResponse(

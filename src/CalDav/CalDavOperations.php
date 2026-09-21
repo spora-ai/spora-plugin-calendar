@@ -35,7 +35,7 @@ final class CalDavOperations
         return $this->helpers->dispatchListEventsRequest($dates, $config);
     }
 
-    public function listCalendars(array $arguments, int $agentId, ?int $userId): ToolResult
+    public function listCalendars(int $agentId, ?int $userId): ToolResult
     {
         $config = $this->helpers->loadBaseConfig($agentId, $userId);
         if ($config instanceof ToolResult) {

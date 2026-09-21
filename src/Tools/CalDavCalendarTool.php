@@ -102,7 +102,7 @@ final class CalDavCalendarTool extends AbstractTool
 
         return match ($operation) {
             'list_events'    => $this->operations->listEvents($arguments, $agentId, $ownerId),
-            'list_calendars' => $this->operations->listCalendars($arguments, $agentId, $ownerId),
+            'list_calendars' => $this->operations->listCalendars($agentId, $ownerId),
             'get_event'      => $this->operations->getEvent($arguments, $agentId, $ownerId),
             'create_event'   => $this->operations->createEvent($arguments, $agentId, $ownerId),
             'edit_event'     => $this->operations->editEvent($arguments, $agentId, $ownerId),

@@ -41,33 +41,58 @@ final class CalDavClient
      */
     public function request(string $method, string $url, array $options): ResponseInterface
     {
-        $authMethod  = $this->resolveAuthMethod($options);
-        $credentials = $this->extractCredentials($options);
+        $authMethod = $this->resolveAuthMethod($options);
+        $response   = $this->dispatch($method, $url, $options, $authMethod);
 
-        $response = $this->dispatch($method, $url, $options, $authMethod);
-
-        if ($response->getStatusCode() !== 401) {
+        // The retry path is only useful when (a) the server challenged us
+        // with a Digest challenge, and (b) we're not pinned to Basic.
+        // All other 401s (or non-401 statuses) surface to the caller as-is.
+        if ($response->getStatusCode() !== 401
+            || $authMethod === self::AUTH_BASIC
+            || !self::responseHasDigestChallenge($response)
+        ) {
             return $response;
         }
-        if ($credentials === null) {
-            return $response;
-        }
-        if ($authMethod === self::AUTH_BASIC) {
-            return $response;
-        }
+        return $this->retryWithDigest($method, $url, $options, $response);
+    }
 
+    /**
+     * Parse the Digest challenge from the 401 and dispatch a retry with
+     * the correct Authorization header. Returns the original 401 when
+     * the challenge can't be parsed or no credentials are configured.
+     */
+    private function retryWithDigest(
+        string $method,
+        string $url,
+        array $options,
+        ResponseInterface $response,
+    ): ResponseInterface {
         $challenge = DigestAuth::parseChallenge($response->getHeaders(false)['www-authenticate'] ?? null);
         if ($challenge === null) {
             return $response;
         }
-
+        $credentials = $this->extractCredentials($options);
+        if ($credentials === null) {
+            return $response;
+        }
         $this->logger?->info('CalDavCalendarTool: retrying with Digest auth', [
             'method' => $method,
             'url'    => $url,
             'realm'  => $challenge['realm'],
         ]);
-
         return $this->dispatchWithDigest($method, $url, $options, $credentials, $challenge);
+    }
+
+    /**
+     * Whether the 401 carries a Digest challenge — the precondition
+     * for the retry path under `auto` and `digest` modes. Extracted
+     * from {@see request()} so the guard list stays under Sonar's
+     * 3-return-per-method budget.
+     */
+    private static function responseHasDigestChallenge(ResponseInterface $response): bool
+    {
+        $headers = $response->getHeaders(false);
+        return isset($headers['www-authenticate']);
     }
 
     /**
@@ -300,7 +325,7 @@ final class CalDavClient
      * the edit flow should fetch a fresh one from the server first.
      *
      * O3 placeholder detection: agents frequently echo back obvious
-     * non-values ("initial", "none", "todo", "unknown") that pass the
+     * non-values ("initial", "none", "later", "unknown") that pass the
      * syntactic RFC 7232 check after `normalizeEtag()` but are guaranteed
      * 412s on the wire. Reject anything that doesn't look like a real
      * opaque-tag payload — at minimum an MD5 / SHA / hex string. The
