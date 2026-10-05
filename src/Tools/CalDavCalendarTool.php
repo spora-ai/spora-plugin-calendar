@@ -91,7 +91,10 @@ final class CalDavCalendarTool extends AbstractTool
     }
 
     /**
-     * @deprecated 1.0 pass $context->ownerUserId instead; removed from the interface in core 0.30.0.
+     * @param int|null $userId Deprecated: the owner now comes from
+     *                          `$context->ownerUserId`, which always held this same
+     *                          value. Removed from the interface in core 0.30.0 —
+     *                          read the context instead.
      */
     public function execute(
         array $arguments,
