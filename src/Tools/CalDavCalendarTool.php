@@ -90,6 +90,9 @@ final class CalDavCalendarTool extends AbstractTool
         );
     }
 
+    /**
+     * @deprecated 1.0 pass $context->ownerUserId instead; removed from the interface in core 0.30.0.
+     */
     public function execute(
         array $arguments,
         int $agentId,
@@ -97,7 +100,7 @@ final class CalDavCalendarTool extends AbstractTool
         ?int $taskId = null,
         ?PrincipalContext $context = null,
     ): ToolResult {
-        $ownerId   = $context->ownerUserId ?? $userId;
+        $ownerId   = $context?->ownerUserId;
         $operation = $this->getOperationName($arguments);
 
         return match ($operation) {

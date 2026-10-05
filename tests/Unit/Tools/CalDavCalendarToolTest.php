@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Spora\Models\Principal;
 use Spora\Plugins\Calendar\Tools\CalDavCalendarTool;
+use Spora\Services\PrincipalContext;
 use Spora\Services\ToolConfigService;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
@@ -58,6 +60,24 @@ it('returns error if caldav is not configured', function () {
 
     expect($result->success)->toBeFalse()
         ->and($result->content)->toContain(CAL_MSG_INCOMPLETE);
+});
+
+it('resolves the settings owner from the principal context, not the legacy user id', function () {
+    $config = Mockery::mock(ToolConfigService::class);
+    $config->allows('getEffectiveSettings')->with(CalDavCalendarTool::class, 1, 99)->andReturn([]);
+    $client = Mockery::mock(HttpClientInterface::class);
+
+    $tool = new CalDavCalendarTool($config, $client);
+    $context = new PrincipalContext(7, Principal::TYPE_USER, 99, 99);
+    $result = $tool->execute(
+        ['start_date' => CAL_START_DATE_APR, 'end_date' => CAL_END_DATE_APR],
+        1,
+        4242,
+        null,
+        $context,
+    );
+
+    expect($result->content)->toContain(CAL_MSG_INCOMPLETE);
 });
 
 it('correctly unfolds RFC 5545 long lines before parsing', function () {
