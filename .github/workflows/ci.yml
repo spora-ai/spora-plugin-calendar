@@ -16,9 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  SPORA_CORE_REF: main
-
 jobs:
   test:
     name: Pest (PHP ${{ matrix.php }})
@@ -39,19 +36,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      # checkout's `path:` is workspace-relative; the path repository resolves ../spora-core.
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -70,19 +56,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      # checkout's `path:` is workspace-relative; the path repository resolves ../spora-core.
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --no-progress
@@ -101,19 +76,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      # checkout's `path:` is workspace-relative; the path repository resolves ../spora-core.
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Check code style
         # Same ruleset as Spora core's .php-cs-fixer.php so plugin style matches host.
@@ -136,19 +100,8 @@ jobs:
           coverage: xdebug
           tools: composer
 
-      - name: Checkout spora-core (path repository)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          repository: spora-ai/spora-core
-          ref: ${{ env.SPORA_CORE_REF }}
-          path: spora-core
-
-      # checkout's `path:` is workspace-relative; the path repository resolves ../spora-core.
-      - name: Link spora-core to the sibling path the lock expects
-        run: ln -sfn "$GITHUB_WORKSPACE/spora-core" "$GITHUB_WORKSPACE/../spora-core"
-
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Generate clover coverage report
         run: ./vendor/bin/pest --coverage-clover=coverage.xml
