@@ -36,8 +36,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run Pest
         run: ./vendor/bin/pest
@@ -56,8 +56,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --no-progress
@@ -76,8 +76,8 @@ jobs:
           coverage: none
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Check code style
         # Same ruleset as Spora core's .php-cs-fixer.php so plugin style matches host.
@@ -100,8 +100,8 @@ jobs:
           coverage: xdebug
           tools: composer
 
-      - name: Composer install
-        run: composer install --no-interaction --prefer-dist
+      - name: Composer update spora-core
+        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist
 
       - name: Generate clover coverage report
         run: ./vendor/bin/pest --coverage-clover=coverage.xml

@@ -72,7 +72,6 @@ it('resolves the settings owner from the principal context, not the legacy user 
     $result = $tool->execute(
         ['start_date' => CAL_START_DATE_APR, 'end_date' => CAL_END_DATE_APR],
         1,
-        4242,
         null,
         $context,
     );
