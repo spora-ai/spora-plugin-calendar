@@ -1,0 +1,8 @@
+{
+  "Calendar": "Kalender",
+  "URL to the Calendar server (e.g. Nextcloud, Baikal)": "URL des Kalenderservers (z. B. Nextcloud, Baikal)",
+  "CalDAV username": "CalDAV-Benutzername",
+  "CalDAV password or app token": "CalDAV-Passwort oder App-Token",
+  "HTTP authentication scheme. Auto sends Basic first and falls back to Digest on a 401 challenge (covers Nextcloud, Baikal, all-inkl, Cyrus).": "HTTP-Authentifizierungsverfahren. „Auto“ sendet zuerst Basic und weicht bei einer 401-Aufforderung auf Digest aus (deckt Nextcloud, Baikal, all-inkl und Cyrus ab).",
+  "Seconds before an HTTP request fails (default: 30)": "Sekunden, bis eine HTTP-Anfrage fehlschlägt (Standard: 30)"
+}
