@@ -43,11 +43,14 @@ final class CalendarPlugin extends AbstractPlugin
      * is never translated — not `#[Tool].description`, not
      * `#[ToolParameter].description`, not `#[ToolSetting].label` or its
      * `options`, and not `ToolResult` content. What `locales/de.json`
-     * holds is every `#[ToolSetting].description` plus the tool's
-     * `displayName`, each a string only an operator ever reads.
+     * holds is the operator-facing copy: every tool's `displayName`, every
+     * `#[ToolSetting].description`, and the `plugin.json` description —
+     * each a string only an operator ever reads.
      *
-     * Requires `spora-core >= 0.31.0` at runtime; older versions fail to
-     * resolve the method when the loader is strict.
+     * Needs a core that reads `translationsPaths()` — 0.31.0 and later. On
+     * 0.30.x nothing calls the method, so the catalogue is silently
+     * ignored and the copy stays English, which is the fallback every
+     * layer already uses.
      *
      * @return string[]
      */

@@ -22,6 +22,7 @@ it('decodes locales/de.json into a non-empty map', function () use ($catalogueFi
 
     expect($decoded)->toBeArray();
     expect($decoded)->not->toBeEmpty();
+    expect(array_is_list($decoded))->toBeFalse();
 });
 
 it('translates every entry instead of repeating the English key', function () use ($catalogueFile): void {
