@@ -60,8 +60,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
     description: 'Seconds before an HTTP request fails (default: 30)',
     default: '30',
 )]
-// Parameter declaration order matches the hand-rolled schema so the approval UI
-// renders fields in the same sequence. `action` is auto-synthesized.
+// The approval UI renders the fields in declaration order, and `action` is
+// auto-synthesized by the schema builder.
 #[ToolParameter(name: 'start_date', type: 'string', description: 'Start of the date range. ISO-8601 datetime (e.g. "2026-09-22T09:00:00"), or YYYY-MM-DD (auto-expanded to T00:00:00 / T23:59:59). For all_day events, pass a date-only string and set all_day=true.', required: ['list_events', 'create_event'])]
 #[ToolParameter(name: 'end_date', type: 'string', description: 'End of the date range. Same format rules as start_date. Must be after start_date.', required: ['list_events', 'create_event'])]
 #[ToolParameter(name: 'event_uri', type: 'string', description: 'The CalDAV URI of the event (required for get_event, edit_event, delete_event). Usually returned in the `event_uri` field of list_events / create_event results.', required: ['get_event', 'edit_event', 'delete_event'])]

@@ -84,10 +84,13 @@ final class CalDavClient
     }
 
     /**
-     * Whether the 401 carries a Digest challenge — the precondition
-     * for the retry path under `auto` and `digest` modes. Extracted
-     * from {@see request()} so the guard list stays under Sonar's
-     * 3-return-per-method budget.
+     * Whether the 401 carries a `WWW-Authenticate` challenge at all — the
+     * precondition for the retry path. Whether the challenge is a *Digest*
+     * one is decided in {@see retryWithDigest()}, which returns the
+     * original 401 when it is not.
+     *
+     * Extracted from {@see request()} so the guard list stays under
+     * Sonar's 3-return-per-method budget.
      */
     private static function responseHasDigestChallenge(ResponseInterface $response): bool
     {
