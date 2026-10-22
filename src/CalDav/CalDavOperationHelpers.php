@@ -344,18 +344,6 @@ final class CalDavOperationHelpers
         ];
     }
 
-    /**
-     * Build the Symfony HttpClient options array shared by every
-     * dispatch method. Centralising it keeps `auth_method`,
-     * `auth_basic`, and the timeout in lockstep — the digest-retry
-     * path in {@see CalDavClient} reads `auth_method` to decide
-     * whether to send Basic preemptively or wait for a 401 challenge.
-     *
-     * @param array{url: string, username: string, password: string, authMethod: string, settings: array<string, mixed>} $config
-     * @param array<string, string> $headers
-     * @return array<string, mixed>
-     */
-
     /** @return array{0: string, 1: string}|ToolResult */
     public function parseDateRange(string $startDateStr, string $endDateStr): array|ToolResult
     {
@@ -369,15 +357,6 @@ final class CalDavOperationHelpers
         $endFormatted   = $end->setTimezone(new DateTimeZone('UTC'))->format('Ymd\THis\Z');
         return [$startFormatted, $endFormatted];
     }
-
-    /**
-     * Expand a bare date `YYYY-MM-DD` into a full ISO-8601 timestamp. Start
-     * dates expand to T00:00:00 (midnight) and end dates to T23:59:59 so a
-     * caller passing `start_date=2026-09-22, end_date=2026-09-22` covers
-     * the whole day without the server rejecting it as "no time component".
-     * Strings that already contain a time component pass through unchanged.
-     */
-
 
     /**
      * Fetch the existing event body so the edit flow can merge changed
